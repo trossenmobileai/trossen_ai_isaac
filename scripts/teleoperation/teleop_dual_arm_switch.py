@@ -90,6 +90,7 @@ ARM_SLICE = {
 
 
 def main() -> None:
+    step_count = 0
     """Run dual-arm switchable teleoperation."""
     last_action = {
         LEFT_ARM:  torch.zeros(6, dtype=torch.float32, device=args_cli.device),
@@ -266,12 +267,18 @@ def main() -> None:
 
                     actions = full_action.unsqueeze(0).repeat(env.num_envs, 1)
 
-                    if full_action.abs().max().item() > 1e-3:
-                        env.step(actions)
-                    else:
-                        env.sim.render()
+                    if step_count % 60 == 0:  # about once per second
+                        print(f"[DEBUG] step {step_count}, full_action = {full_action.tolist()}")
+                    
+                    env.step(actions)   # always step — zero delta = hold position
+                    step_count += 1
+                    
                 else:
-                    env.sim.render()
+                    zero_action = torch.zeros(12, dtype=torch.float32, device=args_cli.device)
+                    if step_count % 60 == 0:
+                        print(f"[DEBUG] step {step_count}, full_action = {zero_action.tolist()}")
+                    env.step(zero_action.unsqueeze(0).repeat(env.num_envs, 1))
+                    step_count += 1
 
                 if should_reset:
                     env.reset()

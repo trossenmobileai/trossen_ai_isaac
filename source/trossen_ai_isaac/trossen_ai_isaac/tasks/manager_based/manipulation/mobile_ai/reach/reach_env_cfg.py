@@ -73,6 +73,10 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = MOBILE_AI_HIGH_PD_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=MOBILE_AI_HIGH_PD_CFG.spawn.replace(
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=True,
+                max_depenetration_velocity=5.0,
+            ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=True,
                 solver_position_iteration_count=16,
