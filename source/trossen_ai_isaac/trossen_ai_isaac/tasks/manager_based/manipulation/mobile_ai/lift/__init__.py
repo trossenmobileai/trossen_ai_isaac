@@ -26,7 +26,6 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Robot configurations for Trossen AI robots."""
+"""Mobile AI lift task environments."""
 
-from .wxai import *
-from .mobile_ai import *
+from .config import *
