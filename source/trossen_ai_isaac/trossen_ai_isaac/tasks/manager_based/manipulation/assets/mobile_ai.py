@@ -119,8 +119,8 @@ MOBILE_AI_CFG = ArticulationCfg(
     },
     soft_joint_pos_limit_factor=1.0,
 )
-# Configuration for Trossen WXAI robot arm with standard physics.
 
+# Configuration for Trossen WXAI robot arm with standard physics.
 MOBILE_AI_HIGH_PD_CFG = MOBILE_AI_CFG.copy()
 MOBILE_AI_HIGH_PD_CFG.spawn.rigid_props.disable_gravity = True
 MOBILE_AI_HIGH_PD_CFG.actuators["left_arm"].stiffness = 400.0
