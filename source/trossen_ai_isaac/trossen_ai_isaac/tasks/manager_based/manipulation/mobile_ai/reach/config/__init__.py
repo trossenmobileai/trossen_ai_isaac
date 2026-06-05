@@ -28,10 +28,15 @@
 
 import gymnasium as gym
 
+from ..ik_abs_env_cfg import MobileAIReachEnvCfg_IK_ABS, MobileAIReachEnvCfg_IK_ABS_PLAY
 from ..reach_env_cfg import MobileAIReachEnvCfg, MobileAIReachEnvCfg_PLAY
 
 ##
 # Register Gym environments.
+##
+
+##
+# Inverse Kinematics - Relative Pose Control (6D delta per arm, 12D total)
 ##
 
 gym.register(
@@ -48,6 +53,28 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": MobileAIReachEnvCfg_PLAY,
+    },
+    disable_env_checker=True,
+)
+
+##
+# Inverse Kinematics - Absolute Pose Control (7D pose per arm, 14D total)
+##
+
+gym.register(
+    id="Isaac-Reach-MobileAI-IK-Abs-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": MobileAIReachEnvCfg_IK_ABS,
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="Isaac-Reach-MobileAI-IK-Abs-Play-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": MobileAIReachEnvCfg_IK_ABS_PLAY,
     },
     disable_env_checker=True,
 )
