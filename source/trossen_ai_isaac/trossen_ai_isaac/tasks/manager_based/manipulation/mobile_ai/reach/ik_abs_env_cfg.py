@@ -109,6 +109,13 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
         #   indices  7..13  -> right arm pose  (consumed by env action)
         #   index    14     -> left  gripper   (no env slot yet, dropped by script)
         #   index    15     -> right gripper   (no env slot yet, dropped by script)
+        #
+        # NOTE: enable_visualization=False is a workaround for an Isaac Lab bug in
+        # Se3AbsRetargeter._update_visualization, which calls Rotation.from_matrix()
+        # on a value that is actually a (4,) quaternion. With visualization on, the
+        # first frame raises:
+        #     "Expected `matrix` to have shape (3, 3) or (N, 3, 3), got (4,)"
+        # The retargeter itself works correctly — only the goal-frame marker is broken.
         self.teleop_devices.devices["handtracking"] = OpenXRDeviceCfg(
             retargeters=[
                 Se3AbsRetargeterCfg(
@@ -116,7 +123,7 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
                     zero_out_xy_rotation=False,
                     use_wrist_rotation=True,
                     use_wrist_position=True,
-                    enable_visualization=True,
+                    enable_visualization=False,
                     sim_device=self.sim.device,
                 ),
                 Se3AbsRetargeterCfg(
@@ -124,7 +131,7 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
                     zero_out_xy_rotation=False,
                     use_wrist_rotation=True,
                     use_wrist_position=True,
-                    enable_visualization=True,
+                    enable_visualization=False,
                     sim_device=self.sim.device,
                 ),
                 GripperRetargeterCfg(
