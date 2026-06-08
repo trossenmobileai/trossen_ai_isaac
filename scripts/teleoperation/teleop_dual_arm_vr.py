@@ -57,6 +57,32 @@ Activation model:
     in an ALVR+SteamVR setup (no CloudXR sample client to publish them) but
     will work automatically if CloudXR or another publisher is added later.
 
+Anchor tuning:
+    The OpenXR world frame (operator's room) and the robot base frame do not
+    automatically align — what feels like "forward" to the operator may not be
+    "forward" to the robot. The XR anchor in MobileAIReachEnvCfg_IK_ABS carries
+    sensible defaults for the Quest 3 + ALVR + SteamVR + Mobile AI stack:
+
+        anchor_pos = (-0.3, 0.0, -0.6)
+        anchor_rot = (0.7071, 0.0, 0.0, -0.7071)   # wxyz, -90 deg about Z
+
+    If the arms still reach toward the wrong place, override at the command
+    line without recompiling the config:
+
+        --anchor_pos  -0.4 0.0 -0.55          # x y z, in meters, robot frame
+        --anchor_rot   0.7071 0 0 +0.7071     # wxyz; flip the last component
+                                              # to swap yaw direction
+
+    Practical tuning recipe (one variable at a time):
+      1. Stand still in a comfortable telepresence pose.
+      2. Adjust anchor_rot's last component (+/-0.7071) until "reach forward"
+         with your right hand pushes the right arm out *in front* of the
+         robot, not behind or to the side.
+      3. Adjust anchor_pos.z (more negative = arms map lower) until your
+         hand-at-chest pose puts the EE at a natural rest height.
+      4. Adjust anchor_pos.x (more negative = operator stands further
+         behind the robot) until the arm workspace covers your reach.
+
 Prerequisites on the workstation:
     * Isaac Lab installed and `./isaaclab.sh -p ...` available
     * ALVR running, Meta Quest 3 connected, SteamVR providing the OpenXR runtime
@@ -108,6 +134,32 @@ parser.add_argument(
         "before tracking starts, so any threshold > 0 distinguishes live from default."
     ),
 )
+parser.add_argument(
+    "--anchor_pos",
+    type=float,
+    nargs=3,
+    metavar=("X", "Y", "Z"),
+    default=None,
+    help=(
+        "Override XrCfg.anchor_pos at launch time. Three floats in meters expressing "
+        "the OpenXR origin (operator's feet) in the robot base frame. Useful for "
+        "sweeping operator standing positions without re-editing ik_abs_env_cfg.py. "
+        "If omitted, the value baked into the task config is used."
+    ),
+)
+parser.add_argument(
+    "--anchor_rot",
+    type=float,
+    nargs=4,
+    metavar=("W", "X", "Y", "Z"),
+    default=None,
+    help=(
+        "Override XrCfg.anchor_rot at launch time. Four floats (w, x, y, z) "
+        "for a unit quaternion rotating OpenXR vectors into the robot base frame. "
+        "Identity is (1,0,0,0); a -90 deg yaw about Z is (0.7071, 0, 0, -0.7071). "
+        "If omitted, the value baked into the task config is used."
+    ),
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -156,6 +208,14 @@ def main() -> None:
     # the env may have declared, and switch to DLSS for VR-friendly anti-aliasing.
     env_cfg = remove_camera_configs(env_cfg)
     env_cfg.sim.render.antialiasing_mode = "DLSS"
+
+    # Optional CLI overrides for the OpenXR anchor (frame alignment between the
+    # operator's headset world and the robot base). Applied here so they take
+    # effect before the env (and its OpenXRDevice) is built.
+    if args_cli.anchor_pos is not None:
+        env_cfg.xr.anchor_pos = tuple(args_cli.anchor_pos)
+    if args_cli.anchor_rot is not None:
+        env_cfg.xr.anchor_rot = tuple(args_cli.anchor_rot)
 
     # Validate that the selected task actually exposes a handtracking device. Failing
     # loud here is much friendlier than a cryptic AttributeError 200 lines later.
@@ -243,6 +303,18 @@ def main() -> None:
     print(
         f"  Warmup:      {warmup_frames_required} frames @ |pos| > {warmup_min_pos:.3f} m "
         "(arms stay idle until hand tracking is stable)"
+    )
+    # Echo the effective XR anchor so the operator can iterate on it from the log
+    # without grepping the config file. CLI overrides win over the config defaults.
+    anchor_pos = tuple(env_cfg.xr.anchor_pos)
+    anchor_rot = tuple(env_cfg.xr.anchor_rot)
+    print(
+        f"  Anchor pos:  ({anchor_pos[0]:+.3f}, {anchor_pos[1]:+.3f}, {anchor_pos[2]:+.3f}) m"
+        f"{'  (CLI override)' if args_cli.anchor_pos is not None else ''}"
+    )
+    print(
+        f"  Anchor rot:  ({anchor_rot[0]:+.4f}, {anchor_rot[1]:+.4f}, {anchor_rot[2]:+.4f}, {anchor_rot[3]:+.4f}) wxyz"
+        f"{'  (CLI override)' if args_cli.anchor_rot is not None else ''}"
     )
     print("  STOP/RESET:  available if a teleop_command publisher is present (e.g. CloudXR)")
     print("=" * 60)

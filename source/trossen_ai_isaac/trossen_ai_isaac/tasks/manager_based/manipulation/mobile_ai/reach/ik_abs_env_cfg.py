@@ -60,14 +60,33 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
     All poses are in the robot base frame.
     """
 
-    # XR anchor — defines how the OpenXR world frame is positioned relative to the
-    # robot base frame. With anchor at the origin and identity rotation, the user's
-    # hand poses are interpreted directly as targets in the robot base frame.
-    # If the operator is standing in front of the robot, you can shift `anchor_pos`
-    # in the +x direction (toward the robot) to bring the comfortable workspace closer.
+    # XR anchor — defines how the OpenXR world frame is positioned and oriented
+    # relative to the robot base frame. `anchor_pos` is the OpenXR origin (under
+    # the operator's feet) expressed in the robot base frame; `anchor_rot` is a
+    # wxyz quaternion rotating OpenXR vectors into the robot base frame.
+    #
+    # Empirical OpenXR convention on this Quest 3 + ALVR + SteamVR setup:
+    #   +X = operator right, +Y = operator forward, +Z = up.
+    # Robot base frame convention:
+    #   +X = robot forward, +Y = robot left, +Z = up.
+    # The -90 deg yaw quaternion below maps OpenXR (right, forward, up)
+    # onto robot (forward, left, up):
+    #     openxr +Y -> robot +X (forward stays forward)
+    #     openxr +X -> robot -Y (operator's right becomes robot's right)
+    #     openxr +Z -> robot +Z (up stays up)
+    #
+    # `anchor_pos.z = -0.6` drops the OpenXR ground 60 cm below the robot base
+    # so a hand at chest height (openxr.z ~ 0.8 m) lands at robot.z ~ 0.2 m,
+    # squarely inside the Mobile AI arm workspace. `anchor_pos.x = -0.3` places
+    # the operator 30 cm "behind" the robot so reaching forward naturally drives
+    # IK targets in front of the robot rather than behind it.
+    #
+    # These values are best treated as a starting point — `scripts/teleoperation/
+    # teleop_dual_arm_vr.py` exposes `--anchor_pos` and `--anchor_rot` flags so
+    # the operator can sweep through anchors without re-editing this config.
     xr: XrCfg = XrCfg(
-        anchor_pos=(0.0, 0.0, 0.0),
-        anchor_rot=(1.0, 0.0, 0.0, 0.0),
+        anchor_pos=(-0.3, 0.0, -0.6),
+        anchor_rot=(0.7071068, 0.0, 0.0, -0.7071068),
     )
 
     def __post_init__(self):
