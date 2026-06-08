@@ -82,17 +82,39 @@ Activation model:
     in an ALVR+SteamVR setup (no CloudXR sample client to publish them) but
     will work automatically if CloudXR or another publisher is added later.
 
-XR anchor (frame alignment):
-    XrCfg.anchor_pos / anchor_rot define how the OpenXR world (operator's room)
-    maps to the robot base frame. In hand_anchored mode anchor_pos is largely
-    irrelevant -- the snapshot cancels any constant position offset. anchor_rot
-    still matters: it determines which DIRECTION in the operator's room
-    corresponds to which direction in the robot frame.
+XR anchor (viewpoint placement + frame alignment):
+    XrCfg.anchor_prim_path / anchor_pos / anchor_rot together control where in
+    the sim the operator's headset appears.
 
-    The task config bakes a sensible default for the Quest 3 + ALVR + SteamVR
-    stack (-90 deg yaw about Z). Override at the command line if needed:
-        --anchor_rot 0.7071 0 0 +0.7071   # flip yaw if forward becomes back
-        --anchor_pos 0 0 -0.6             # only useful in 'absolute' mode
+    By default the task config pins the XRAnchor under the robot's head-camera
+    body (`/World/envs/env_0/Robot/cam_high`), so the operator gets a true
+    first-person view from the robot's camera stand between the arms. The view
+    follows the prim in world space, so if the robot's base moves, the operator
+    moves with it.
+
+    anchor_pos is then a USD child-transform offset relative to that prim.
+    The default `(0, 0, -1.7)` cancels a 1.7 m tall operator's physical headset
+    height so the eyes land *at* the camera height instead of well above it.
+    Override for different operator heights:
+        --anchor_pos 0 0 -1.6   # for 1.60 m
+        --anchor_pos 0 0 -1.8   # for 1.80 m
+
+    anchor_rot is the -90 deg yaw that aligns OpenXR's "forward" (operator's
+    physical +Y) with the robot's "forward" (+X). It does NOT affect the
+    hand_anchored IK math (that's frame-invariant once the snapshot is taken),
+    but it does control how operator head rotation in the room maps to view
+    rotation in the sim.
+
+    To pick a different anchor prim (e.g. base_link for a natural standing
+    view), use:
+        --anchor_prim_path /World/envs/env_0/Robot/base_link
+
+    Or run with --list_bodies once to print all robot bodies and their world
+    positions; pick whichever body matches the desired viewpoint.
+
+    To restore a static world anchor (no prim attachment), set --anchor_prim_path
+    to the empty string is not currently supported; instead, edit the task
+    config to pass `anchor_prim_path=None` to XrCfg.
 
 Prerequisites on the workstation:
     * Isaac Lab installed and `./isaaclab.sh -p ...` available
@@ -189,6 +211,27 @@ parser.add_argument(
         "carefully in this mode."
     ),
 )
+parser.add_argument(
+    "--anchor_prim_path",
+    type=str,
+    default=None,
+    help=(
+        "Override XrCfg.anchor_prim_path at launch time. USD prim path under which the "
+        "XR anchor is parented; the operator's headset view then tracks that prim in "
+        "world space (FPV). The task config defaults to the robot's head-camera body "
+        "('/World/envs/env_0/Robot/cam_high'). Use --list_bodies to print the available "
+        "robot body names if the default doesn't match this URDF."
+    ),
+)
+parser.add_argument(
+    "--list_bodies",
+    action="store_true",
+    help=(
+        "Debug helper: print the list of robot body names (and their world poses for "
+        "env 0) right after env construction. Useful for figuring out the correct "
+        "--anchor_prim_path value. The script continues normally afterward."
+    ),
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -272,6 +315,8 @@ def main() -> None:
         env_cfg.xr.anchor_pos = tuple(args_cli.anchor_pos)
     if args_cli.anchor_rot is not None:
         env_cfg.xr.anchor_rot = tuple(args_cli.anchor_rot)
+    if args_cli.anchor_prim_path is not None:
+        env_cfg.xr.anchor_prim_path = args_cli.anchor_prim_path
 
     # Validate that the selected task actually exposes a handtracking device. Failing
     # loud here is much friendlier than a cryptic AttributeError 200 lines later.
@@ -306,6 +351,20 @@ def main() -> None:
     # Looking these up once at startup avoids per-step name lookups and produces a
     # clear error if the env doesn't expose the expected bodies.
     robot = env.scene["robot"]
+
+    # Optional debug dump: list every body name (and its current world pose for
+    # env 0) so the operator can pick a sensible --anchor_prim_path. Print but
+    # keep going so the rest of the session is unaffected.
+    if args_cli.list_bodies:
+        print("\n" + "=" * 60)
+        print("Robot bodies (env 0): name -> world position [x, y, z] m")
+        print("=" * 60)
+        body_pos_w = robot.data.body_pos_w[0]  # (num_bodies, 3)
+        for idx, name in enumerate(robot.body_names):
+            pos = body_pos_w[idx]
+            print(f"  [{idx:>2}] {name:<40} ({pos[0]:+.3f}, {pos[1]:+.3f}, {pos[2]:+.3f})")
+        print("=" * 60 + "\n")
+
     try:
         left_body_idx = robot.body_names.index(LEFT_EE_BODY_NAME)
         right_body_idx = robot.body_names.index(RIGHT_EE_BODY_NAME)
@@ -452,8 +511,18 @@ def main() -> None:
     # without grepping the config file. CLI overrides win over the config defaults.
     anchor_pos = tuple(env_cfg.xr.anchor_pos)
     anchor_rot = tuple(env_cfg.xr.anchor_rot)
+    anchor_prim_path = env_cfg.xr.anchor_prim_path
+    if anchor_prim_path is None:
+        anchor_prim_str = "(none -- static world anchor)"
+    else:
+        anchor_prim_str = anchor_prim_path
+    print(
+        f"  Anchor prim: {anchor_prim_str}"
+        f"{'  (CLI override)' if args_cli.anchor_prim_path is not None else ''}"
+    )
     print(
         f"  Anchor pos:  ({anchor_pos[0]:+.3f}, {anchor_pos[1]:+.3f}, {anchor_pos[2]:+.3f}) m"
+        f"{'  (offset from anchor prim)' if anchor_prim_path is not None else ''}"
         f"{'  (CLI override)' if args_cli.anchor_pos is not None else ''}"
     )
     print(

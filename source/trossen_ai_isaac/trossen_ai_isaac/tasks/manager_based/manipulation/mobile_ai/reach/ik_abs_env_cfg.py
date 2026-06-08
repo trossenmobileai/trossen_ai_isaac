@@ -60,32 +60,37 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
     All poses are in the robot base frame.
     """
 
-    # XR anchor — defines how the OpenXR world frame is positioned and oriented
-    # relative to the robot base frame. `anchor_pos` is the OpenXR origin (under
-    # the operator's feet) expressed in the robot base frame; `anchor_rot` is a
-    # wxyz quaternion rotating OpenXR vectors into the robot base frame.
+    # XR anchor — first-person view at the robot's head camera.
     #
-    # Empirical OpenXR convention on this Quest 3 + ALVR + SteamVR setup:
-    #   +X = operator right, +Y = operator forward, +Z = up.
-    # Robot base frame convention:
-    #   +X = robot forward, +Y = robot left, +Z = up.
-    # The -90 deg yaw quaternion below maps OpenXR (right, forward, up)
-    # onto robot (forward, left, up):
-    #     openxr +Y -> robot +X (forward stays forward)
-    #     openxr +X -> robot -Y (operator's right becomes robot's right)
-    #     openxr +Z -> robot +Z (up stays up)
+    # `anchor_prim_path` parents the XRAnchor under the camera stand body
+    # (`cam_high`) on the robot articulation. The operator's headset then tracks
+    # that prim in world space, so the view sits *inside* the robot looking out
+    # from its camera, regardless of how the robot is positioned in the scene.
     #
-    # `anchor_pos.z = -0.6` drops the OpenXR ground 60 cm below the robot base
-    # so a hand at chest height (openxr.z ~ 0.8 m) lands at robot.z ~ 0.2 m,
-    # squarely inside the Mobile AI arm workspace. `anchor_pos.x = -0.3` places
-    # the operator 30 cm "behind" the robot so reaching forward naturally drives
-    # IK targets in front of the robot rather than behind it.
+    # `anchor_pos` and `anchor_rot` are applied as a USD child transform on top
+    # of the parent prim:
+    #   * `anchor_pos.z = -1.7` cancels a 1.7 m tall operator's physical
+    #     headset height so their eyes land at the camera height instead of
+    #     ~1.7 m above it. Override via --anchor_pos if you're a different
+    #     height (e.g. `--anchor_pos 0 0 -1.6` for 1.6 m, or `0 0 -1.8` for
+    #     1.8 m). The hand-anchored IK math is unaffected by this offset.
+    #   * `anchor_rot` is the same -90 deg yaw we've been using to align
+    #     OpenXR's "forward" (+Y) with the robot's "forward" (+X). This stays
+    #     useful in FOV terms -- it determines how operator head motion in
+    #     the room maps to view rotation in the sim.
     #
-    # These values are best treated as a starting point — `scripts/teleoperation/
-    # teleop_dual_arm_vr.py` exposes `--anchor_pos` and `--anchor_rot` flags so
-    # the operator can sweep through anchors without re-editing this config.
+    # anchor_rotation_mode defaults to FIXED, so this -90 deg yaw stays world-
+    # constant rather than rotating with the parent prim. For mobile bases that
+    # turn, you might prefer FOLLOW_PRIM_SMOOTHED so the view yaws with the
+    # robot; switch at runtime via env_cfg.xr.anchor_rotation_mode if needed.
+    #
+    # NOTE: the prim path assumes env_0. If you bring up multiple envs, the
+    # operator can only "be in" one of them; env_0 is the conventional choice.
+    # If `cam_high` is not the right body on your URDF, override with
+    # --anchor_prim_path or run with --list_bodies once to see what's available.
     xr: XrCfg = XrCfg(
-        anchor_pos=(-0.3, 0.0, -0.6),
+        anchor_prim_path="/World/envs/env_0/Robot/cam_high",
+        anchor_pos=(0.0, 0.0, -1.7),
         anchor_rot=(0.7071068, 0.0, 0.0, -0.7071068),
     )
 
