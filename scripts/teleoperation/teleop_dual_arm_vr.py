@@ -32,15 +32,34 @@ This script is purpose-built for VR. Both arms are controlled simultaneously:
     left  hand  -> left  arm  (follower_left_link_6)
     right hand  -> right arm  (follower_right_link_6)
 
-There is no arm switching, no dead-zone, and no delta computation — each hand pose
-flows straight through `Se3AbsRetargeter` into a 14D absolute pose action that the
-env's differential IK solver consumes directly.
+The env action space is 14D absolute IK (left 7D + right 7D, [pos_xyz, quat_wxyz]
+per arm). How the operator's hand poses become EE targets is controlled by
+`--anchor_mode`:
+
+  hand_anchored (default, recommended for room-scale VR)
+    The first frame teleop is actively forwarding actions, the script snapshots
+    the operator's hand pose AND the robot's current EE pose. Every subsequent
+    frame, the EE target is composed via a "rigid bracket" coupling so the
+    relative pose between the operator's hand and the EE stays constant:
+        target_pos  = hand_curr_pos + (ee_init_pos - hand_init_pos)
+        target_quat = hand_curr_quat * (hand_init_quat^-1 * ee_init_quat)
+    Moving the hand 10 cm right moves the EE 10 cm right; rotating the hand by
+    30 deg about an axis rotates the EE by the same 30 deg about the same axis
+    in the world frame. Standing still leaves the EE still. The hand's absolute
+    world position is irrelevant -- the operator can stand anywhere.
+
+  absolute
+    The hand pose (in the anchored OpenXR world frame) is fed directly as the
+    IK target. The robot physically tries to BE where the hand is. Sensible
+    only when the operator's body is meant to coincide with the robot (e.g.
+    GR1T2-style humanoid avatars). Requires careful XrCfg.anchor_pos tuning.
 
 Pipeline:
     OpenXRDevice.advance()
         -> torch.Tensor of shape [16] in the order declared in MobileAIReachEnvCfg_IK_ABS:
            [L_pose(7), R_pose(7), L_grip(1), R_grip(1)]
-    -> slice [:14] = [L_pose, R_pose]              (env action)
+    -> slice [:14] = [L_pose, R_pose]              (raw hand action)
+    -> compose with offsets (hand_anchored) OR pass through (absolute)
     -> broadcast to [num_envs, 14] and env.step()
 
 The two gripper retargeter outputs are intentionally NOT fed to the env because the
@@ -53,35 +72,27 @@ Activation model:
     actions to the env. This avoids the arms snapping to the OpenXR origin
     while the operator is still putting the headset on.
 
+    In hand_anchored mode, the hand<->EE snapshot is taken at the first frame
+    after warm-up. It is invalidated (and re-taken on the next active frame) on:
+        * env.reset()
+        * STOP -> START transitions (when a teleop_command publisher exists)
+    so the operator can pause, reposition their body, and resume cleanly.
+
     The Isaac Lab START/STOP/RESET callbacks remain wired up. They are no-ops
     in an ALVR+SteamVR setup (no CloudXR sample client to publish them) but
     will work automatically if CloudXR or another publisher is added later.
 
-Anchor tuning:
-    The OpenXR world frame (operator's room) and the robot base frame do not
-    automatically align — what feels like "forward" to the operator may not be
-    "forward" to the robot. The XR anchor in MobileAIReachEnvCfg_IK_ABS carries
-    sensible defaults for the Quest 3 + ALVR + SteamVR + Mobile AI stack:
+XR anchor (frame alignment):
+    XrCfg.anchor_pos / anchor_rot define how the OpenXR world (operator's room)
+    maps to the robot base frame. In hand_anchored mode anchor_pos is largely
+    irrelevant -- the snapshot cancels any constant position offset. anchor_rot
+    still matters: it determines which DIRECTION in the operator's room
+    corresponds to which direction in the robot frame.
 
-        anchor_pos = (-0.3, 0.0, -0.6)
-        anchor_rot = (0.7071, 0.0, 0.0, -0.7071)   # wxyz, -90 deg about Z
-
-    If the arms still reach toward the wrong place, override at the command
-    line without recompiling the config:
-
-        --anchor_pos  -0.4 0.0 -0.55          # x y z, in meters, robot frame
-        --anchor_rot   0.7071 0 0 +0.7071     # wxyz; flip the last component
-                                              # to swap yaw direction
-
-    Practical tuning recipe (one variable at a time):
-      1. Stand still in a comfortable telepresence pose.
-      2. Adjust anchor_rot's last component (+/-0.7071) until "reach forward"
-         with your right hand pushes the right arm out *in front* of the
-         robot, not behind or to the side.
-      3. Adjust anchor_pos.z (more negative = arms map lower) until your
-         hand-at-chest pose puts the EE at a natural rest height.
-      4. Adjust anchor_pos.x (more negative = operator stands further
-         behind the robot) until the arm workspace covers your reach.
+    The task config bakes a sensible default for the Quest 3 + ALVR + SteamVR
+    stack (-90 deg yaw about Z). Override at the command line if needed:
+        --anchor_rot 0.7071 0 0 +0.7071   # flip yaw if forward becomes back
+        --anchor_pos 0 0 -0.6             # only useful in 'absolute' mode
 
 Prerequisites on the workstation:
     * Isaac Lab installed and `./isaaclab.sh -p ...` available
@@ -160,6 +171,24 @@ parser.add_argument(
         "If omitted, the value baked into the task config is used."
     ),
 )
+parser.add_argument(
+    "--anchor_mode",
+    type=str,
+    default="hand_anchored",
+    choices=["hand_anchored", "absolute"],
+    help=(
+        "How hand poses become EE targets. "
+        "'hand_anchored' (default): snapshot the hand pose and EE pose the first frame "
+        "teleop is active, then drive the EE only with the relative motion of the hand. "
+        "Robot mirrors hand DELTA -- moving the hand 10 cm right moves the EE 10 cm right, "
+        "regardless of the hand's absolute position. Recommended for room-scale VR with the "
+        "operator standing alongside/behind the robot. "
+        "'absolute': feed the hand world-pose directly as the IK target. The robot tries to "
+        "physically be where your hand is. Only sensible if the operator's body is meant to "
+        "coincide with the robot (e.g. humanoid avatars). XrCfg.anchor_pos must be tuned "
+        "carefully in this mode."
+    ),
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -180,6 +209,7 @@ import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
 from isaaclab.devices.openxr import remove_camera_configs
 from isaaclab.devices.teleop_device_factory import create_teleop_device
+from isaaclab.utils.math import quat_conjugate, quat_mul, subtract_frame_transforms
 from isaaclab_tasks.utils import parse_env_cfg
 
 logger = logging.getLogger(__name__)
@@ -195,6 +225,32 @@ ACTION_DIM_ENV = 2 * ACTION_DIM_PER_ARM  # 14D goes to env.step
 RETARGETER_OUTPUT_DIM = 2 * ACTION_DIM_PER_ARM + 2  # 16D coming out of advance()
 LEFT_GRIP_IDX = 14
 RIGHT_GRIP_IDX = 15
+
+LEFT_EE_BODY_NAME = "follower_left_link_6"
+RIGHT_EE_BODY_NAME = "follower_right_link_6"
+
+
+def _get_ee_base_pose(robot, body_idx: int, env_idx: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the EE pose of a single body in the robot base frame.
+
+    Reads world-frame body pose + root pose from the articulation buffer and converts
+    to the robot's base frame via :func:`subtract_frame_transforms`. Returns two 1D
+    tensors: position (3,) and quaternion wxyz (4,), both on the articulation's device.
+    """
+    pos_w = robot.data.body_pos_w[env_idx, body_idx]  # (3,)
+    quat_w = robot.data.body_quat_w[env_idx, body_idx]  # (4,) wxyz
+    root_pos_w = robot.data.root_pos_w[env_idx]  # (3,)
+    root_quat_w = robot.data.root_quat_w[env_idx]  # (4,) wxyz
+
+    # subtract_frame_transforms expects batched (N, 3) / (N, 4) tensors; add a batch
+    # axis for the call and strip it on the way out.
+    pos_base, quat_base = subtract_frame_transforms(
+        root_pos_w.unsqueeze(0),
+        root_quat_w.unsqueeze(0),
+        pos_w.unsqueeze(0),
+        quat_w.unsqueeze(0),
+    )
+    return pos_base.squeeze(0), quat_base.squeeze(0)
 
 
 def main() -> None:
@@ -246,6 +302,22 @@ def main() -> None:
             "You probably selected a non-IK-Abs task; expect a shape mismatch on env.step()."
         )
 
+    # -- Resolve robot articulation and EE bodies for hand-anchored mode --
+    # Looking these up once at startup avoids per-step name lookups and produces a
+    # clear error if the env doesn't expose the expected bodies.
+    robot = env.scene["robot"]
+    try:
+        left_body_idx = robot.body_names.index(LEFT_EE_BODY_NAME)
+        right_body_idx = robot.body_names.index(RIGHT_EE_BODY_NAME)
+    except ValueError as exc:
+        logger.error(
+            f"Could not locate EE bodies on robot ({exc}). Expected '{LEFT_EE_BODY_NAME}' and "
+            f"'{RIGHT_EE_BODY_NAME}' in robot.body_names. Available: {list(robot.body_names)}"
+        )
+        env.close()
+        simulation_app.close()
+        return
+
     # -- State flags --
     should_reset = False
     # Auto-start: there is no CloudXR sample client in an ALVR+SteamVR setup to
@@ -261,6 +333,64 @@ def main() -> None:
     warmup_complete = False
     warmup_valid_count = 0
 
+    # Hand-anchor state. In hand_anchored mode, the EE target is composed as
+    #   target_pos  = hand_curr_pos + pos_offset
+    #   target_quat = quat_offset * hand_curr_quat
+    # where pos_offset and quat_offset are captured the first frame teleop is
+    # actively forwarding actions, so the hand-at-snapshot maps exactly to the
+    # EE-at-snapshot and the EE thereafter mirrors only the hand's *delta*.
+    # In absolute mode, these stay None and the raw action is forwarded as-is.
+    anchor_mode = args_cli.anchor_mode
+    anchor_captured = False
+    pos_offset_l: torch.Tensor | None = None
+    quat_offset_l: torch.Tensor | None = None
+    pos_offset_r: torch.Tensor | None = None
+    quat_offset_r: torch.Tensor | None = None
+
+    def _capture_anchor(action_14d: torch.Tensor) -> None:
+        """Snapshot the current hand poses and EE poses to define delta anchors.
+
+        Called the first frame teleop is actively forwarding actions. Captures both
+        hand poses (from the retargeter output) and both EE poses (from the robot
+        articulation, in the robot base frame), and stores the offsets that map
+        hand-delta motion into EE-delta motion.
+        """
+        nonlocal anchor_captured, pos_offset_l, quat_offset_l, pos_offset_r, quat_offset_r
+
+        hand_l_pos = action_14d[0:3]
+        hand_l_quat = action_14d[3:7]
+        hand_r_pos = action_14d[7:10]
+        hand_r_quat = action_14d[10:14]
+
+        ee_l_pos, ee_l_quat = _get_ee_base_pose(robot, left_body_idx)
+        ee_r_pos, ee_r_quat = _get_ee_base_pose(robot, right_body_idx)
+
+        # Articulation tensors might live on a slightly different device than the
+        # action tensor (e.g. sim_device vs args_cli.device). Move EE tensors to
+        # the action's device so all subsequent math stays on one device.
+        ee_l_pos = ee_l_pos.to(hand_l_pos.device)
+        ee_l_quat = ee_l_quat.to(hand_l_quat.device)
+        ee_r_pos = ee_r_pos.to(hand_r_pos.device)
+        ee_r_quat = ee_r_quat.to(hand_r_quat.device)
+
+        pos_offset_l = ee_l_pos - hand_l_pos
+        pos_offset_r = ee_r_pos - hand_r_pos
+        # Rigid-bracket coupling: hand and EE move together as if linked by a
+        # constant rigid offset. Equivalently, the hand-to-EE relative orientation
+        # is fixed. Solving ee_curr = hand_curr * rot_offset gives:
+        #   rot_offset = conj(hand_init) * ee_init
+        # so the math composes as ee_curr = hand_curr * rot_offset (right-mul).
+        quat_offset_l = quat_mul(quat_conjugate(hand_l_quat), ee_l_quat)
+        quat_offset_r = quat_mul(quat_conjugate(hand_r_quat), ee_r_quat)
+
+        anchor_captured = True
+        print(
+            "[ANCHOR] Captured. "
+            f"L pos_offset=[{pos_offset_l[0]:+.3f}, {pos_offset_l[1]:+.3f}, {pos_offset_l[2]:+.3f}]  "
+            f"R pos_offset=[{pos_offset_r[0]:+.3f}, {pos_offset_r[1]:+.3f}, {pos_offset_r[2]:+.3f}]  "
+            "(EE will mirror hand delta from now on)"
+        )
+
     def reset_env() -> None:
         nonlocal should_reset
         should_reset = True
@@ -272,9 +402,13 @@ def main() -> None:
         print("[TELEOP] Activated (left+right hands -> left+right arms)")
 
     def stop_teleop() -> None:
-        nonlocal teleoperation_active
+        nonlocal teleoperation_active, anchor_captured
         teleoperation_active = False
-        print("[TELEOP] Deactivated (robot holds last pose)")
+        # Invalidate the snapshot so the next START re-anchors the hand to wherever
+        # the EE has come to rest. Without this, resuming would jolt the EE by the
+        # delta accumulated while teleop was paused.
+        anchor_captured = False
+        print("[TELEOP] Deactivated (robot holds last pose; next START will re-anchor)")
 
     teleoperation_callbacks: dict[str, Callable[[], None]] = {
         "START": start_teleop,
@@ -300,6 +434,16 @@ def main() -> None:
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
     print(f"  Task:        {args_cli.task}")
     print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D, absolute IK)")
+    if anchor_mode == "hand_anchored":
+        print(
+            "  Anchor mode: hand_anchored "
+            "(EE mirrors hand DELTA from snapshot at first active frame)"
+        )
+    else:
+        print(
+            "  Anchor mode: absolute "
+            "(EE target = hand world pose; XrCfg.anchor_pos governs alignment)"
+        )
     print(
         f"  Warmup:      {warmup_frames_required} frames @ |pos| > {warmup_min_pos:.3f} m "
         "(arms stay idle until hand tracking is stable)"
@@ -368,7 +512,36 @@ def main() -> None:
 
                 step_actions = teleoperation_active and warmup_complete
                 if step_actions:
-                    actions = action_14d.unsqueeze(0).repeat(env.num_envs, 1)
+                    if anchor_mode == "hand_anchored":
+                        # First active frame after warm-up / reset / STOP->START: snap
+                        # the hand-EE relationship into place. Subsequent frames will
+                        # use the captured offsets so the EE mirrors only hand deltas.
+                        if not anchor_captured:
+                            _capture_anchor(action_14d)
+
+                        hand_l_pos = action_14d[0:3]
+                        hand_l_quat = action_14d[3:7]
+                        hand_r_pos = action_14d[7:10]
+                        hand_r_quat = action_14d[10:14]
+
+                        target_l_pos = hand_l_pos + pos_offset_l
+                        # Right-multiply: see derivation in _capture_anchor. This gives
+                        # the rigid-bracket feel -- rotating the hand in world frame
+                        # rotates the EE by the same world-frame quaternion.
+                        target_l_quat = quat_mul(hand_l_quat, quat_offset_l)
+                        target_r_pos = hand_r_pos + pos_offset_r
+                        target_r_quat = quat_mul(hand_r_quat, quat_offset_r)
+
+                        target_action = torch.cat(
+                            [target_l_pos, target_l_quat, target_r_pos, target_r_quat]
+                        )
+                    else:
+                        # 'absolute' mode: pass the hand pose straight through as the
+                        # IK target. Only sensible when the operator's body is meant
+                        # to coincide with the robot.
+                        target_action = action_14d
+
+                    actions = target_action.unsqueeze(0).repeat(env.num_envs, 1)
                     env.step(actions)
                 else:
                     # Render only — robot holds its last IK target. Without this,
@@ -381,7 +554,10 @@ def main() -> None:
                     if not warmup_complete:
                         state = f"WARMUP {warmup_valid_count}/{warmup_frames_required}"
                     elif teleoperation_active:
-                        state = "ON"
+                        if anchor_mode == "hand_anchored" and not anchor_captured:
+                            state = "ANCHORING"
+                        else:
+                            state = f"ON/{anchor_mode}"
                     else:
                         state = "PAUSED"
                     print(
@@ -399,8 +575,12 @@ def main() -> None:
                     # so we should re-verify tracking before re-engaging the arms.
                     warmup_complete = False
                     warmup_valid_count = 0
+                    # Drop the snapshot too: the EE is back at the reset pose and the
+                    # operator's hand may be anywhere. The next active frame will
+                    # capture a fresh anchor.
+                    anchor_captured = False
                     should_reset = False
-                    print("[RESET] Done -- waiting for warm-up to re-engage teleop")
+                    print("[RESET] Done -- waiting for warm-up + re-anchor to re-engage teleop")
 
         except Exception as e:
             logger.error(f"Simulation step error: {e}")
