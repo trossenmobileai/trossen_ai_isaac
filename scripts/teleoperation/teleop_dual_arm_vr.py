@@ -46,15 +46,22 @@ Pipeline:
 The two gripper retargeter outputs are intentionally NOT fed to the env because the
 env's ActionsCfg has no gripper_action term yet. They are logged for future use.
 
-Gestures (provided by Isaac Lab's OpenXR teleop UI in the headset):
-    START : begin streaming hand poses to the robot
-    STOP  : pause (robot holds last commanded pose)
-    RESET : reset the env to its initial pose
+Activation model:
+    The script auto-starts as soon as hand tracking is stable. A warm-up guard
+    (configurable via --warmup_frames / --warmup_min_pos) waits for both hand
+    positions to be clearly non-zero for N consecutive frames before forwarding
+    actions to the env. This avoids the arms snapping to the OpenXR origin
+    while the operator is still putting the headset on.
+
+    The Isaac Lab START/STOP/RESET callbacks remain wired up. They are no-ops
+    in an ALVR+SteamVR setup (no CloudXR sample client to publish them) but
+    will work automatically if CloudXR or another publisher is added later.
 
 Prerequisites on the workstation:
     * Isaac Lab installed and `./isaaclab.sh -p ...` available
     * ALVR running, Meta Quest 3 connected, SteamVR providing the OpenXR runtime
     * Run via `./isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py ...`
+    * In Isaac Sim's AR panel: set Output Plugin = OpenXR, then click "Start AR"
 
 Launch Isaac Sim Simulator first.
 """
@@ -79,6 +86,27 @@ parser.add_argument(
     type=str,
     default="handtracking",
     help="Key into env_cfg.teleop_devices.devices selecting the OpenXR device entry.",
+)
+parser.add_argument(
+    "--warmup_frames",
+    type=int,
+    default=30,
+    help=(
+        "Number of consecutive frames with non-zero hand positions required before the "
+        "script starts forwarding actions to env.step(). Prevents the arms from snapping "
+        "to the OpenXR origin while the operator puts the headset on. ~30 frames = 0.5s "
+        "at 60 Hz."
+    ),
+)
+parser.add_argument(
+    "--warmup_min_pos",
+    type=float,
+    default=0.02,
+    help=(
+        "Per-hand position-vector norm (meters) above which a frame is considered "
+        "'live tracking' for warm-up. The OpenXR device defaults all poses to (0,0,0) "
+        "before tracking starts, so any threshold > 0 distinguishes live from default."
+    ),
 )
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -160,7 +188,18 @@ def main() -> None:
 
     # -- State flags --
     should_reset = False
-    teleoperation_active = False  # VR convention: user pinches START to begin
+    # Auto-start: there is no CloudXR sample client in an ALVR+SteamVR setup to
+    # publish the "START" carb event, so we begin active and gate stepping on
+    # the warm-up guard below. Stop is still respected if a publisher exists.
+    teleoperation_active = True
+    # Warm-up state: only forward actions to env.step() after both hands have
+    # reported non-zero positions for `warmup_frames_required` consecutive
+    # frames. This prevents the arms from snapping toward (0,0,0) while the
+    # operator is still putting the headset on or before tracking goes live.
+    warmup_frames_required = max(1, int(args_cli.warmup_frames))
+    warmup_min_pos = float(args_cli.warmup_min_pos)
+    warmup_complete = False
+    warmup_valid_count = 0
 
     def reset_env() -> None:
         nonlocal should_reset
@@ -201,7 +240,11 @@ def main() -> None:
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
     print(f"  Task:        {args_cli.task}")
     print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D, absolute IK)")
-    print("  Gestures:    START / STOP / RESET (pinch in the headset UI)")
+    print(
+        f"  Warmup:      {warmup_frames_required} frames @ |pos| > {warmup_min_pos:.3f} m "
+        "(arms stay idle until hand tracking is stable)"
+    )
+    print("  STOP/RESET:  available if a teleop_command publisher is present (e.g. CloudXR)")
     print("=" * 60)
 
     # -- Reset --
@@ -233,18 +276,42 @@ def main() -> None:
                 left_grip = float(raw[LEFT_GRIP_IDX].item()) if raw.numel() > LEFT_GRIP_IDX else 0.0
                 right_grip = float(raw[RIGHT_GRIP_IDX].item()) if raw.numel() > RIGHT_GRIP_IDX else 0.0
 
-                if teleoperation_active:
+                # Warm-up gate: only forward actions once both hands have been
+                # reporting non-zero positions for N consecutive frames. Until
+                # then we render only, so the operator can put the headset on
+                # without the arms jumping toward the OpenXR origin.
+                l_pos_norm = float(action_14d[:3].norm().item())
+                r_pos_norm = float(action_14d[7:10].norm().item())
+                if not warmup_complete:
+                    if l_pos_norm > warmup_min_pos and r_pos_norm > warmup_min_pos:
+                        warmup_valid_count += 1
+                        if warmup_valid_count >= warmup_frames_required:
+                            warmup_complete = True
+                            print(
+                                f"[WARMUP] Hand tracking stable after "
+                                f"{warmup_valid_count} frames -- arms now driven by VR."
+                            )
+                    else:
+                        warmup_valid_count = 0
+
+                step_actions = teleoperation_active and warmup_complete
+                if step_actions:
                     actions = action_14d.unsqueeze(0).repeat(env.num_envs, 1)
                     env.step(actions)
                 else:
-                    # Render only — the robot holds whatever pose the IK target last
-                    # settled on. Without this, the viewer freezes while paused.
+                    # Render only — robot holds its last IK target. Without this,
+                    # the viewer freezes while we're waiting on warm-up or paused.
                     env.sim.render()
 
                 if step_count % 60 == 0:
                     l_pos = action_14d[:3].tolist()
                     r_pos = action_14d[7:10].tolist()
-                    state = "ON" if teleoperation_active else "PAUSED"
+                    if not warmup_complete:
+                        state = f"WARMUP {warmup_valid_count}/{warmup_frames_required}"
+                    elif teleoperation_active:
+                        state = "ON"
+                    else:
+                        state = "PAUSED"
                     print(
                         f"[VR step={step_count} {state}] "
                         f"L_pos={[f'{v:+.3f}' for v in l_pos]} "
@@ -256,8 +323,12 @@ def main() -> None:
                 if should_reset:
                     env.reset()
                     teleop_interface.reset()
+                    # Re-warm-up after a reset: device pose cache was just cleared
+                    # so we should re-verify tracking before re-engaging the arms.
+                    warmup_complete = False
+                    warmup_valid_count = 0
                     should_reset = False
-                    print("[RESET] Done")
+                    print("[RESET] Done -- waiting for warm-up to re-engage teleop")
 
         except Exception as e:
             logger.error(f"Simulation step error: {e}")
