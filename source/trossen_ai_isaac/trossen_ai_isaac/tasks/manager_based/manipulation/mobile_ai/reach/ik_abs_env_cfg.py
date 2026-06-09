@@ -63,7 +63,7 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
     # XR anchor — first-person view at the robot's head camera.
     #
     # `anchor_prim_path` parents the XRAnchor under the camera stand body
-    # (`cam_high`) on the robot articulation. The operator's headset then tracks
+    # (`cam_high_link`) on the robot articulation. The operator's headset then tracks
     # that prim in world space, so the view sits *inside* the robot looking out
     # from its camera, regardless of how the robot is positioned in the scene.
     #
@@ -86,10 +86,10 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
     #
     # NOTE: the prim path assumes env_0. If you bring up multiple envs, the
     # operator can only "be in" one of them; env_0 is the conventional choice.
-    # If `cam_high` is not the right body on your URDF, override with
+    # If `cam_high_link` is not the right body on your URDF, override with
     # --anchor_prim_path or run with --list_bodies once to see what's available.
     xr: XrCfg = XrCfg(
-        anchor_prim_path="/World/envs/env_0/Robot/cam_high",
+        anchor_prim_path="/World/envs/env_0/Robot/cam_high_link",
         anchor_pos=(0.0, 0.0, -1.7),
         anchor_rot=(0.7071068, 0.0, 0.0, -0.7071068),
     )
