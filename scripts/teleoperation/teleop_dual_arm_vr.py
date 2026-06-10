@@ -87,7 +87,7 @@ XR anchor (viewpoint placement + frame alignment):
     the sim the operator's headset appears.
 
     By default the task config pins the XRAnchor under the robot's head-camera
-    body (`/World/envs/env_0/Robot/cam_high_link`), so the operator gets a true
+    body (`/World/envs/env_0/Robot/cam_high`), so the operator gets a true
     first-person view from the robot's camera stand between the arms. The view
     follows the prim in world space, so if the robot's base moves, the operator
     moves with it.
@@ -234,7 +234,7 @@ parser.add_argument(
         "Override XrCfg.anchor_prim_path at launch time. USD prim path under which the "
         "XR anchor is parented; the operator's headset view then tracks that prim in "
         "world space (FPV). The task config defaults to the robot's head-camera body "
-        "('/World/envs/env_0/Robot/cam_high_link'). Use --list_bodies to print the available "
+        "('/World/envs/env_0/Robot/cam_high'). Use --list_bodies to print the available "
         "robot body names if the default doesn't match this URDF."
     ),
 )
