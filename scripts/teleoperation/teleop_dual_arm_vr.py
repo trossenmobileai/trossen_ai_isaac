@@ -87,7 +87,7 @@ XR anchor (viewpoint placement + frame alignment):
     the sim the operator's headset appears.
 
     By default the task config pins the XRAnchor under the robot's head-camera
-    body (`/World/envs/env_0/Robot/cam_high`), so the operator gets a true
+    body (`/World/envs/env_0/Robot/cam_high_link`), so the operator gets a true
     first-person view from the robot's camera stand between the arms. The view
     follows the prim in world space, so if the robot's base moves, the operator
     moves with it.
@@ -115,21 +115,6 @@ XR anchor (viewpoint placement + frame alignment):
     To restore a static world anchor (no prim attachment), set --anchor_prim_path
     to the empty string is not currently supported; instead, edit the task
     config to pass `anchor_prim_path=None` to XrCfg.
-
-Lock translation (--lock_translation):
-    ALVR / SteamVR sometimes drop the stream and re-establish the OpenXR tracking
-    origin on reconnect. That re-zero shifts the operator's headset world
-    position by a few cm to a few m, so the FPV "jumps" each time.
-
-    `--lock_translation` installs a per-frame hook that captures the operator's
-    headset offset from the anchor prim on the first valid tracking frame and
-    then continuously nudges `XrCfg.anchor_pos` so the headset world position
-    stays at that same offset. Translational drift -- whether from reconnects
-    or operator walking around -- is cancelled within ~1 frame. Head rotation
-    is left untouched, so the operator can still look around normally.
-
-    Recommended for unstable streaming sessions. When you ARE in a stable
-    session and want to lean in / inspect, leave the flag off.
 
 Prerequisites on the workstation:
     * Isaac Lab installed and `./isaaclab.sh -p ...` available
@@ -234,7 +219,7 @@ parser.add_argument(
         "Override XrCfg.anchor_prim_path at launch time. USD prim path under which the "
         "XR anchor is parented; the operator's headset view then tracks that prim in "
         "world space (FPV). The task config defaults to the robot's head-camera body "
-        "('/World/envs/env_0/Robot/cam_high'). Use --list_bodies to print the available "
+        "('/World/envs/env_0/Robot/cam_high_link'). Use --list_bodies to print the available "
         "robot body names if the default doesn't match this URDF."
     ),
 )
@@ -245,19 +230,6 @@ parser.add_argument(
         "Debug helper: print the list of robot body names (and their world poses for "
         "env 0) right after env construction. Useful for figuring out the correct "
         "--anchor_prim_path value. The script continues normally afterward."
-    ),
-)
-parser.add_argument(
-    "--lock_translation",
-    action="store_true",
-    help=(
-        "Pin the headset's world position to a fixed offset from the anchor prim. "
-        "Cancels translational drift from ALVR/SteamVR stream reconnects (where the "
-        "OpenXR tracking origin gets re-zeroed and the FPV otherwise teleports). "
-        "Head rotation is still tracked, so the operator can look around. "
-        "Captures the operator's current head-to-anchor-prim offset the first valid "
-        "tracking frame, then holds that offset. Leave off for stable sessions; "
-        "turn on for laggy streams or when the POV keeps jumping on reconnect."
     ),
 )
 AppLauncher.add_app_launcher_args(parser)
@@ -271,12 +243,9 @@ app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
 
 # --- Imports after sim launch ---
-import contextlib
 import logging
-from typing import Any
 
 import gymnasium as gym
-import numpy as np
 import torch
 
 import isaaclab_tasks  # noqa: F401
@@ -325,135 +294,6 @@ def _get_ee_base_pose(robot, body_idx: int, env_idx: int = 0) -> tuple[torch.Ten
         quat_w.unsqueeze(0),
     )
     return pos_base.squeeze(0), quat_base.squeeze(0)
-
-
-def _install_translation_lock(
-    xr_cfg: Any,
-    xr_anchor_prim_path: str,
-    *,
-    invalid_pos_norm: float = 1e-3,
-) -> Any:
-    """Pin the headset's world translation; leave rotation tracked.
-
-    Subscribes a callback to OpenXR's ``pre_sync_update`` event. The subscription
-    is registered *after* the XR runtime is up (and after Isaac Lab's
-    ``XrAnchorSynchronizer`` has been wired), so it runs second within the
-    event and observes the freshly-set ``/XRAnchor`` pose.
-
-    On the first valid tracking frame the callback snapshots
-    ``eye_offset = headset_world - anchor_prim_world``. From then on, every
-    frame it computes::
-
-        target_h = anchor_prim_world + eye_offset
-        delta    = target_h - headset_world
-        xr_cfg.anchor_pos += delta     # synchronizer applies next frame
-        /XRAnchor.world_pos += delta   # apply this frame too, no 1-frame lag
-
-    The synchronizer adds ``anchor_pos`` directly in world frame (no rotation),
-    so the ``anchor_prim_world = /XRAnchor_world - anchor_pos`` identity holds
-    regardless of ``anchor_rot`` / ``anchor_rotation_mode``. Rotation is never
-    touched here, so head tilting and looking around keep working normally.
-
-    Args:
-        xr_cfg: The ``XrCfg`` instance the OpenXRDevice was built with. Its
-            ``anchor_pos`` field is mutated each frame.
-        xr_anchor_prim_path: USD path of the ``/XRAnchor`` prim. Typically
-            ``<anchor_prim_path>/XRAnchor`` when an anchor prim is configured,
-            else ``/World/XRAnchor``.
-        invalid_pos_norm: Headset positions with ``|pos| <= invalid_pos_norm``
-            are treated as "not tracking yet" and ignored, so we don't latch
-            the lock target to the (0, 0, 0) default the OpenXR device returns
-            before tracking is live. Defaults to 1 mm.
-
-    Returns:
-        The carb subscription handle. The caller must keep a reference for the
-        lifetime of the lock; dropping it unsubscribes.
-    """
-    # Imports are local so the file imports cleanly when omni.kit.xr.core
-    # isn't present (tests, headless smoke checks, etc.).
-    from isaacsim.core.prims import SingleXFormPrim
-    from omni.kit.xr.core import XRCore, XRCoreEventType
-
-    xr_core = XRCore.get_singleton()
-    if xr_core is None:
-        raise RuntimeError(
-            "XRCore.get_singleton() returned None; --lock_translation requires the "
-            "XR runtime to be initialised (i.e. AppLauncher launched with xr=True "
-            "and the env has been constructed)."
-        )
-
-    anchor_prim = SingleXFormPrim(xr_anchor_prim_path)
-
-    state: dict[str, Any] = {
-        "captured": False,
-        "eye_offset": None,
-    }
-
-    def _read_headset_world_pos() -> np.ndarray | None:
-        head_device = xr_core.get_input_device("/user/head")
-        if head_device is None:
-            return None
-        try:
-            hmd = head_device.get_virtual_world_pose("")
-        except Exception:
-            return None
-        if hmd is None:
-            return None
-        t = hmd.ExtractTranslation()
-        return np.array([t[0], t[1], t[2]], dtype=np.float64)
-
-    def _read_anchor_world_pose() -> tuple[np.ndarray, np.ndarray] | None:
-        try:
-            pos, quat = anchor_prim.get_world_pose()
-        except Exception:
-            return None
-        return (
-            np.asarray(pos, dtype=np.float64).reshape(3),
-            np.asarray(quat, dtype=np.float64).reshape(4),
-        )
-
-    def _callback(_event: Any) -> None:
-        h_curr = _read_headset_world_pos()
-        if h_curr is None or float(np.linalg.norm(h_curr)) <= invalid_pos_norm:
-            return
-        anchor_pose = _read_anchor_world_pose()
-        if anchor_pose is None:
-            return
-        a_anchor, a_quat = anchor_pose
-
-        o_curr = np.asarray(xr_cfg.anchor_pos, dtype=np.float64)
-        a_base = a_anchor - o_curr
-
-        if not state["captured"]:
-            state["eye_offset"] = h_curr - a_base
-            state["captured"] = True
-            print(
-                "[LOCK] Translation pinned. eye_offset (world frame) = "
-                f"[{state['eye_offset'][0]:+.3f}, {state['eye_offset'][1]:+.3f}, "
-                f"{state['eye_offset'][2]:+.3f}] m"
-            )
-            return
-
-        target_h = a_base + state["eye_offset"]
-        delta = target_h - h_curr
-
-        # No clamp on `delta`: a fresh reconnect can introduce a multi-metre jump,
-        # and we want to cancel it in a single frame rather than drift back over
-        # many frames.
-        o_new = o_curr + delta
-        xr_cfg.anchor_pos = (float(o_new[0]), float(o_new[1]), float(o_new[2]))
-
-        # Apply directly to /XRAnchor so the current frame is corrected too.
-        # Without this, there is a one-frame lag while we wait for the
-        # synchronizer to read the new anchor_pos.
-        with contextlib.suppress(Exception):
-            anchor_prim.set_world_pose(position=a_anchor + delta, orientation=a_quat)
-
-    return xr_core.get_message_bus().create_subscription_to_pop_by_type(
-        XRCoreEventType.pre_sync_update,
-        _callback,
-        name="trossen_xr_lock_translation",
-    )
 
 
 def main() -> None:
@@ -648,24 +488,6 @@ def main() -> None:
         simulation_app.close()
         return
 
-    # -- Optional: lock headset translation (rotation still tracked) --
-    # Held in `lock_sub` to keep the carb subscription alive for the session.
-    lock_sub: Any = None
-    if args_cli.lock_translation:
-        xr_anchor_prim_path = getattr(teleop_interface, "_xr_anchor_headset_path", None)
-        xr_cfg_obj = getattr(teleop_interface, "_xr_cfg", env_cfg.xr)
-        if xr_anchor_prim_path is None:
-            logger.warning(
-                "--lock_translation requested but the OpenXRDevice does not expose "
-                "'_xr_anchor_headset_path'. This Isaac Lab version may be older than "
-                "expected; lock will be skipped."
-            )
-        else:
-            try:
-                lock_sub = _install_translation_lock(xr_cfg_obj, xr_anchor_prim_path)
-            except Exception as exc:
-                logger.warning(f"Failed to install --lock_translation hook: {exc}")
-
     print(f"\nUsing teleop device: {teleop_interface}")
     print("=" * 60)
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
@@ -707,17 +529,6 @@ def main() -> None:
         f"  Anchor rot:  ({anchor_rot[0]:+.4f}, {anchor_rot[1]:+.4f}, {anchor_rot[2]:+.4f}, {anchor_rot[3]:+.4f}) wxyz"
         f"{'  (CLI override)' if args_cli.anchor_rot is not None else ''}"
     )
-    if args_cli.lock_translation:
-        if lock_sub is not None:
-            print(
-                "  Lock trans:  ON  (headset world translation pinned; rotation still tracked)"
-            )
-        else:
-            print(
-                "  Lock trans:  REQUESTED but not installed (see warning above)"
-            )
-    else:
-        print("  Lock trans:  off")
     print("  STOP/RESET:  available if a teleop_command publisher is present (e.g. CloudXR)")
     print("=" * 60)
 
@@ -844,11 +655,6 @@ def main() -> None:
             logger.error(f"Simulation step error: {e}")
             break
 
-    # Drop the lock subscription before tearing down the env so its callback
-    # stops firing while the stage is being torn down. Matches the pattern
-    # OpenXRDevice.__del__ uses for its own carb subscriptions.
-    if lock_sub is not None:
-        lock_sub = None  # noqa: F841
     env.close()
     print("Environment closed.")
 
