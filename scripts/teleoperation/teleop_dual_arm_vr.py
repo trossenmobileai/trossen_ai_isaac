@@ -78,17 +78,19 @@ arm's carriage joint (see ik_abs_env_cfg.py).
 Activation model:
     Staged start (default): the script begins INACTIVE. A warm-up guard
     (configurable via --warmup_frames / --warmup_min_pos) waits for both hand
-    positions to be clearly non-zero for N consecutive frames, after which a
-    second user at the workstation presses SPACE to engage. The hand<->EE anchor
+    positions to be clearly non-zero for several consecutive frames, after which
+    a second user at the workstation presses N to engage. The hand<->EE anchor
     is captured at that moment, so the arms never jump on connect. Pass
     --autostart to engage automatically once warm-up completes (old behavior).
 
     Workstation keyboard controls (a plain Se3Keyboard sidecar):
-        SPACE -> start/engage      P -> pause (hold pose; re-anchors on resume)
-        B     -> re-anchor only     R -> reset environment
+        N -> start/engage      M -> pause (hold pose; re-anchors on resume)
+        B -> re-anchor only    J -> reset environment
+    (SPACE/P/R/ENTER are deliberately avoided -- they collide with Kit shortcuts;
+    SPACE in particular is the timeline play/pause and would freeze the sim.)
 
     In hand_anchored mode, the hand<->EE snapshot is taken on the first active
-    frame and re-taken on env.reset(), P->SPACE (pause/resume), or B (re-anchor),
+    frame and re-taken on env.reset(), M->N (pause/resume), or B (re-anchor),
     so the operator can pause, reposition or re-orient their body, and resume.
 
     The Isaac Lab START/STOP/RESET callbacks remain wired up too. They are no-ops
@@ -272,7 +274,7 @@ parser.add_argument(
         "Begin teleoperation automatically once hand tracking warms up, instead of "
         "waiting for a workstation key press. Default (flag absent) is the staged "
         "workflow: the operator positions their hands, then a second user at the "
-        "workstation presses SPACE to engage, so the arms never jump on connect."
+        "workstation presses N to engage, so the arms never jump on connect."
     ),
 )
 parser.add_argument(
@@ -485,21 +487,29 @@ def main() -> None:
     env_cfg = remove_camera_configs(env_cfg)
     env_cfg.sim.render.antialiasing_mode = "DLSS"
 
-    # Apply the viewpoint preset first (sets anchor prim/pos/rot), then let any
-    # explicit --anchor_* flags override the corresponding field. Precedence:
-    # explicit flag > --view preset > task-config default. All applied before the
-    # env (and its OpenXRDevice) is built so they take effect on first frame.
+    # Resolve the effective XR anchor: start from the --view preset, then let any
+    # explicit --anchor_* flag override the corresponding field. Precedence:
+    # explicit flag > --view preset > task-config default.
     preset = VIEW_PRESETS[args_cli.view]
-    env_cfg.xr.anchor_prim_path = preset["anchor_prim_path"]
-    env_cfg.xr.anchor_pos = preset["anchor_pos"]
-    env_cfg.xr.anchor_rot = preset["anchor_rot"]
-
+    anchor_prim_path = preset["anchor_prim_path"]
+    anchor_pos = preset["anchor_pos"]
+    anchor_rot = preset["anchor_rot"]
     if args_cli.anchor_pos is not None:
-        env_cfg.xr.anchor_pos = tuple(args_cli.anchor_pos)
+        anchor_pos = tuple(args_cli.anchor_pos)
     if args_cli.anchor_rot is not None:
-        env_cfg.xr.anchor_rot = tuple(args_cli.anchor_rot)
+        anchor_rot = tuple(args_cli.anchor_rot)
     if args_cli.anchor_prim_path is not None:
-        env_cfg.xr.anchor_prim_path = args_cli.anchor_prim_path
+        anchor_prim_path = args_cli.anchor_prim_path
+
+    # Mirror the resolved anchor onto env_cfg.xr. NOTE: this alone does NOT move the
+    # headset -- OpenXRDevice.__init__ reads the anchor from its OWN cfg.xr_cfg (the
+    # OpenXRDeviceCfg under teleop_devices), builds the XRAnchor xform from it, and
+    # sets the carb customAnchor. env_cfg.xr is kept in sync only so the startup
+    # banner reports the truth; the device's xr_cfg (set below) is what actually
+    # places the viewpoint.
+    env_cfg.xr.anchor_prim_path = anchor_prim_path
+    env_cfg.xr.anchor_pos = anchor_pos
+    env_cfg.xr.anchor_rot = anchor_rot
 
     # Validate that the selected task actually exposes a handtracking device. Failing
     # loud here is much friendlier than a cryptic AttributeError 200 lines later.
@@ -510,6 +520,22 @@ def main() -> None:
         )
         simulation_app.close()
         return
+
+    # Push the resolved anchor onto the OpenXR device cfg -- this is the copy the
+    # device actually consumes when building the headset anchor. Without this, the
+    # --view preset and --anchor_* overrides are silently ignored and the headset
+    # falls back to whatever the task config baked in (the first-person default).
+    device_cfg = env_cfg.teleop_devices.devices[args_cli.device_name]
+    device_xr_cfg = getattr(device_cfg, "xr_cfg", None)
+    if device_xr_cfg is not None:
+        device_xr_cfg.anchor_prim_path = anchor_prim_path
+        device_xr_cfg.anchor_pos = anchor_pos
+        device_xr_cfg.anchor_rot = anchor_rot
+    else:
+        logger.warning(
+            f"Teleop device '{args_cli.device_name}' has no xr_cfg; --view/--anchor_* "
+            "overrides cannot be applied and the viewpoint will use the config default."
+        )
 
     try:
         env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
@@ -563,7 +589,7 @@ def main() -> None:
     # -- State flags --
     should_reset = False
     # Staged start: by default we begin INACTIVE so the operator can get their
-    # hands into a comfortable neutral pose first; a workstation key (SPACE) then
+    # hands into a comfortable neutral pose first; a workstation key (N) then
     # engages teleop and the anchor is captured at that pose, so the arms never
     # jump on connect. --autostart restores the old behavior (engage as soon as
     # hand tracking warms up). Either way the warm-up guard still gates stepping.
@@ -718,19 +744,24 @@ def main() -> None:
     # from CloudXR carb events, which ALVR+SteamVR doesn't publish, so we add a
     # plain Se3Keyboard purely for its key callbacks (its SE3 motion output is
     # ignored). Its advance() is pumped each loop so events are processed.
-    #   SPACE -> start/engage teleop      P -> pause (hold pose, re-anchor on resume)
-    #   B     -> re-anchor (no pause)      R -> reset environment
+    #   N -> start/engage teleop      M -> pause (hold pose, re-anchor on resume)
+    #   B -> re-anchor (no pause)     J -> reset environment
+    #
+    # Key choice matters: SPACE is Kit's timeline play/pause (pressing it both
+    # engaged teleop AND paused the sim), and P/R/ENTER are bound to other Kit
+    # shortcuts. N/M/B/J were verified clear of Kit and of Se3Keyboard's built-in
+    # SE(3) keys (K, W, S, A, D, Q, E, Z, X, T, G, C, V, L).
     keyboard_interface = None
     try:
         keyboard_interface = Se3Keyboard(Se3KeyboardCfg())
-        keyboard_interface.add_callback("SPACE", start_teleop)
-        keyboard_interface.add_callback("P", stop_teleop)
+        keyboard_interface.add_callback("N", start_teleop)
+        keyboard_interface.add_callback("M", stop_teleop)
         keyboard_interface.add_callback("B", reanchor)
-        keyboard_interface.add_callback("R", reset_env)
+        keyboard_interface.add_callback("J", reset_env)
     except Exception as exc:
         logger.warning(
             f"Failed to create keyboard sidecar ({exc}); workstation key controls "
-            "(SPACE/P/B/R) will be unavailable. Teleop can still run, but consider "
+            "(N/M/B/J) will be unavailable. Teleop can still run, but consider "
             "--autostart so it engages without a key press."
         )
         keyboard_interface = None
@@ -806,10 +837,10 @@ def main() -> None:
     if args_cli.autostart:
         print("  Start:       autostart (engages as soon as hand tracking warms up)")
     else:
-        print("  Start:       staged -- position hands, then press SPACE at the workstation")
+        print("  Start:       staged -- position hands, then press N at the workstation")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
     if keyboard_interface is not None:
-        print("  Keys:        SPACE=start  P=pause  B=re-anchor  R=reset  (workstation keyboard)")
+        print("  Keys:        N=start  M=pause  B=re-anchor  J=reset  (workstation keyboard)")
     else:
         print("  Keys:        keyboard sidecar unavailable -- use --autostart to engage")
     print("=" * 60)
@@ -858,7 +889,7 @@ def main() -> None:
     while simulation_app.is_running():
         try:
             with torch.inference_mode():
-                # Pump the workstation keyboard so its key callbacks (SPACE/P/B/R)
+                # Pump the workstation keyboard so its key callbacks (N/M/B/J)
                 # are processed. We ignore its SE3 motion output.
                 if keyboard_interface is not None:
                     keyboard_interface.advance()
@@ -898,7 +929,7 @@ def main() -> None:
                             ready_msg = (
                                 "arms now driven by VR."
                                 if teleoperation_active
-                                else "press SPACE at the workstation to engage."
+                                else "press N at the workstation to engage."
                             )
                             print(
                                 f"[WARMUP] Hand tracking stable after "
