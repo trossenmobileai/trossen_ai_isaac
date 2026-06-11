@@ -38,15 +38,23 @@ per arm). How the operator's hand poses become EE targets is controlled by
 
   hand_anchored (default, recommended for room-scale VR)
     The first frame teleop is actively forwarding actions, the script snapshots
-    the operator's hand pose AND the robot's current EE pose. Every subsequent
-    frame, the EE target is composed via a "rigid bracket" coupling so the
-    relative pose between the operator's hand and the EE stays constant:
-        target_pos  = hand_curr_pos + (ee_init_pos - hand_init_pos)
-        target_quat = hand_curr_quat * (hand_init_quat^-1 * ee_init_quat)
-    Moving the hand 10 cm right moves the EE 10 cm right; rotating the hand by
-    30 deg about an axis rotates the EE by the same 30 deg about the same axis
-    in the world frame. Standing still leaves the EE still. The hand's absolute
-    world position is irrelevant -- the operator can stand anywhere.
+    the operator's hand pose, the robot's current EE pose, AND the operator's
+    head yaw. Every subsequent frame, the EE target is composed via a "rigid
+    bracket" coupling expressed in the operator's head-yaw frame:
+        delta       = R_yaw_inv * (hand_curr_pos - hand_init_pos)
+        target_pos  = ee_init_pos + delta
+        target_quat = R_yaw_inv * hand_curr_quat * (hand_init_quat^-1 * R_yaw * ee_init_quat)
+    where R_yaw is the head yaw (about Z) captured at snapshot time. Because the
+    delta is rotated out of the head frame, "reach forward relative to the
+    headset" drives the robot forward (its base/arm forward) no matter which way
+    the operator stands or faces. Moving the hand 10 cm in any head-relative
+    direction moves the EE 10 cm in the matching robot-frame direction; standing
+    still leaves the EE still. The hand's absolute world position is irrelevant.
+
+    The head yaw is snapshotted at anchor time, not tracked live, so turning the
+    head WHILE teleoperating does not rotate the command frame (head wobble can't
+    corrupt commands). If the operator physically re-orients their body, they
+    should re-anchor (reset, or stop->start) to re-capture the facing.
 
   absolute
     The hand pose (in the anchored OpenXR world frame) is fed directly as the
@@ -244,6 +252,7 @@ simulation_app = app_launcher.app
 
 # --- Imports after sim launch ---
 import logging
+import math
 
 import gymnasium as gym
 import torch
@@ -252,7 +261,7 @@ import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
 from isaaclab.devices.openxr import remove_camera_configs
 from isaaclab.devices.teleop_device_factory import create_teleop_device
-from isaaclab.utils.math import quat_conjugate, quat_mul, subtract_frame_transforms
+from isaaclab.utils.math import quat_apply, quat_conjugate, quat_mul, subtract_frame_transforms, yaw_quat
 from isaaclab_tasks.utils import parse_env_cfg
 
 logger = logging.getLogger(__name__)
@@ -294,6 +303,47 @@ def _get_ee_base_pose(robot, body_idx: int, env_idx: int = 0) -> tuple[torch.Ten
         quat_w.unsqueeze(0),
     )
     return pos_base.squeeze(0), quat_base.squeeze(0)
+
+
+def _get_head_quat(device: torch.device | str) -> torch.Tensor | None:
+    """Read the headset orientation in the XR anchored/world frame as wxyz.
+
+    The hand poses produced by ``Se3AbsRetargeter`` are OpenXR *virtual world*
+    poses (the wrist's pose in the XR anchored frame). The head pose read here via
+    ``get_virtual_world_pose`` lives in that same frame, so a yaw extracted from it
+    is directly comparable to the hand-position deltas — which is exactly what the
+    head-relative remapping needs.
+
+    Returns a (4,) tensor [w, x, y, z] on ``device``, or ``None`` if the XR runtime,
+    head device, or its pose is unavailable this frame (caller falls back to the
+    previous world-locked behavior).
+    """
+    try:
+        from omni.kit.xr.core import XRCore
+    except ModuleNotFoundError:
+        return None
+
+    xr_core = XRCore.get_singleton() if XRCore is not None else None
+    if xr_core is None:
+        return None
+    head_device = xr_core.get_input_device("/user/head")
+    if head_device is None:
+        return None
+    try:
+        hmd = head_device.get_virtual_world_pose("")
+    except Exception:
+        return None
+    if hmd is None:
+        return None
+
+    quat = hmd.ExtractRotationQuat()
+    w = float(quat.GetReal())
+    imag = quat.GetImaginary()
+    return torch.tensor(
+        [w, float(imag[0]), float(imag[1]), float(imag[2])],
+        dtype=torch.float32,
+        device=device,
+    )
 
 
 def main() -> None:
@@ -393,28 +443,38 @@ def main() -> None:
     warmup_valid_count = 0
 
     # Hand-anchor state. In hand_anchored mode, the EE target is composed as
-    #   target_pos  = hand_curr_pos + pos_offset
-    #   target_quat = quat_offset * hand_curr_quat
-    # where pos_offset and quat_offset are captured the first frame teleop is
-    # actively forwarding actions, so the hand-at-snapshot maps exactly to the
-    # EE-at-snapshot and the EE thereafter mirrors only the hand's *delta*.
+    #   delta       = R_yaw_inv * (hand_curr_pos - hand_init_pos)
+    #   target_pos  = ee_init_pos + delta
+    #   target_quat = R_yaw_inv * hand_curr_quat * quat_offset
+    # where the init poses, quat_offset and the head-yaw quaternion are captured
+    # the first frame teleop is actively forwarding actions. R_yaw is the operator's
+    # head yaw (about Z) in the anchored frame at snapshot time; pre-multiplying its
+    # inverse rotates hand motion from "forward relative to the headset" into the
+    # robot's forward, so the operator can stand/face anywhere. With R_yaw = identity
+    # this reduces to the previous world-locked rigid-bracket coupling.
     # In absolute mode, these stay None and the raw action is forwarded as-is.
     anchor_mode = args_cli.anchor_mode
     anchor_captured = False
-    pos_offset_l: torch.Tensor | None = None
+    hand_init_pos_l: torch.Tensor | None = None
+    hand_init_pos_r: torch.Tensor | None = None
+    ee_init_pos_l: torch.Tensor | None = None
+    ee_init_pos_r: torch.Tensor | None = None
     quat_offset_l: torch.Tensor | None = None
-    pos_offset_r: torch.Tensor | None = None
     quat_offset_r: torch.Tensor | None = None
+    head_yaw_inv: torch.Tensor | None = None
 
     def _capture_anchor(action_14d: torch.Tensor) -> None:
-        """Snapshot the current hand poses and EE poses to define delta anchors.
+        """Snapshot hand poses, EE poses, and head yaw to define delta anchors.
 
         Called the first frame teleop is actively forwarding actions. Captures both
-        hand poses (from the retargeter output) and both EE poses (from the robot
-        articulation, in the robot base frame), and stores the offsets that map
-        hand-delta motion into EE-delta motion.
+        hand poses (from the retargeter output), both EE poses (from the robot
+        articulation, in the robot base frame), and the operator's head yaw in the
+        anchored frame. The head yaw defines the control frame so that hand motion
+        "forward relative to the headset" maps to the robot's forward regardless of
+        where the operator stands or faces.
         """
-        nonlocal anchor_captured, pos_offset_l, quat_offset_l, pos_offset_r, quat_offset_r
+        nonlocal anchor_captured, hand_init_pos_l, hand_init_pos_r
+        nonlocal ee_init_pos_l, ee_init_pos_r, quat_offset_l, quat_offset_r, head_yaw_inv
 
         hand_l_pos = action_14d[0:3]
         hand_l_quat = action_14d[3:7]
@@ -432,22 +492,43 @@ def main() -> None:
         ee_r_pos = ee_r_pos.to(hand_r_pos.device)
         ee_r_quat = ee_r_quat.to(hand_r_quat.device)
 
-        pos_offset_l = ee_l_pos - hand_l_pos
-        pos_offset_r = ee_r_pos - hand_r_pos
-        # Rigid-bracket coupling: hand and EE move together as if linked by a
-        # constant rigid offset. Equivalently, the hand-to-EE relative orientation
-        # is fixed. Solving ee_curr = hand_curr * rot_offset gives:
-        #   rot_offset = conj(hand_init) * ee_init
-        # so the math composes as ee_curr = hand_curr * rot_offset (right-mul).
-        quat_offset_l = quat_mul(quat_conjugate(hand_l_quat), ee_l_quat)
-        quat_offset_r = quat_mul(quat_conjugate(hand_r_quat), ee_r_quat)
+        # Capture head yaw (about Z) in the anchored frame. r_yaw rotates a vector
+        # FROM the head-forward frame INTO the anchored frame; its inverse does the
+        # reverse, which is what we use to fold the operator's facing out of the
+        # hand delta. Fall back to identity (world-locked behavior) if head pose
+        # isn't available this frame.
+        head_quat = _get_head_quat(hand_l_pos.device)
+        if head_quat is None:
+            r_yaw = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=hand_l_pos.device)
+            head_source = "identity (head pose unavailable)"
+        else:
+            r_yaw = yaw_quat(head_quat)
+            head_source = "headset"
+        head_yaw_inv = quat_conjugate(r_yaw)
+        yaw_deg = math.degrees(2.0 * math.atan2(float(r_yaw[3]), float(r_yaw[0])))
+
+        hand_init_pos_l = hand_l_pos.clone()
+        hand_init_pos_r = hand_r_pos.clone()
+        ee_init_pos_l = ee_l_pos.clone()
+        ee_init_pos_r = ee_r_pos.clone()
+
+        # Orientation coupling, head-relative. The world-frame hand delta rotation
+        # is dR = hand_curr * conj(hand_init); re-expressing it in the head-yaw
+        # frame and applying it to the EE start orientation gives:
+        #   target = R_yaw_inv * hand_curr * conj(hand_init) * R_yaw * ee_init
+        # Pre-baking everything except hand_curr into quat_offset:
+        #   quat_offset = conj(hand_init) * R_yaw * ee_init
+        #   target      = R_yaw_inv * hand_curr * quat_offset
+        quat_offset_l = quat_mul(quat_conjugate(hand_l_quat), quat_mul(r_yaw, ee_l_quat))
+        quat_offset_r = quat_mul(quat_conjugate(hand_r_quat), quat_mul(r_yaw, ee_r_quat))
 
         anchor_captured = True
         print(
             "[ANCHOR] Captured. "
-            f"L pos_offset=[{pos_offset_l[0]:+.3f}, {pos_offset_l[1]:+.3f}, {pos_offset_l[2]:+.3f}]  "
-            f"R pos_offset=[{pos_offset_r[0]:+.3f}, {pos_offset_r[1]:+.3f}, {pos_offset_r[2]:+.3f}]  "
-            "(EE will mirror hand delta from now on)"
+            f"head_yaw={yaw_deg:+.1f} deg [{head_source}]  "
+            f"L ee0=[{ee_init_pos_l[0]:+.3f}, {ee_init_pos_l[1]:+.3f}, {ee_init_pos_l[2]:+.3f}]  "
+            f"R ee0=[{ee_init_pos_r[0]:+.3f}, {ee_init_pos_r[1]:+.3f}, {ee_init_pos_r[2]:+.3f}]  "
+            "(EE mirrors head-relative hand delta from now on)"
         )
 
     def reset_env() -> None:
@@ -496,7 +577,7 @@ def main() -> None:
     if anchor_mode == "hand_anchored":
         print(
             "  Anchor mode: hand_anchored "
-            "(EE mirrors hand DELTA from snapshot at first active frame)"
+            "(EE mirrors head-relative hand DELTA from snapshot at first active frame)"
         )
     else:
         print(
@@ -593,13 +674,17 @@ def main() -> None:
                         hand_r_pos = action_14d[7:10]
                         hand_r_quat = action_14d[10:14]
 
-                        target_l_pos = hand_l_pos + pos_offset_l
-                        # Right-multiply: see derivation in _capture_anchor. This gives
-                        # the rigid-bracket feel -- rotating the hand in world frame
-                        # rotates the EE by the same world-frame quaternion.
-                        target_l_quat = quat_mul(hand_l_quat, quat_offset_l)
-                        target_r_pos = hand_r_pos + pos_offset_r
-                        target_r_quat = quat_mul(hand_r_quat, quat_offset_r)
+                        # Position: rotate the hand delta out of the operator's
+                        # head-yaw frame and into the robot frame, then offset onto
+                        # the EE start pose. "Reach forward relative to the headset"
+                        # -> robot reaches forward, no matter which way the operator
+                        # faces (see _capture_anchor for the frame definition).
+                        target_l_pos = ee_init_pos_l + quat_apply(head_yaw_inv, hand_l_pos - hand_init_pos_l)
+                        target_r_pos = ee_init_pos_r + quat_apply(head_yaw_inv, hand_r_pos - hand_init_pos_r)
+                        # Orientation: head-relative rigid-bracket coupling.
+                        #   target = R_yaw_inv * hand_curr * quat_offset
+                        target_l_quat = quat_mul(head_yaw_inv, quat_mul(hand_l_quat, quat_offset_l))
+                        target_r_quat = quat_mul(head_yaw_inv, quat_mul(hand_r_quat, quat_offset_r))
 
                         target_action = torch.cat(
                             [target_l_pos, target_l_quat, target_r_pos, target_r_quat]
