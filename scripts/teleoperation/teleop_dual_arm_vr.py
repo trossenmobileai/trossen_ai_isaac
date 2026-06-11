@@ -40,21 +40,25 @@ operator's hand poses become EE targets is controlled by `--anchor_mode`:
     The first frame teleop is actively forwarding actions, the script snapshots
     the operator's hand pose, the robot's current EE pose, AND the operator's
     head yaw. Every subsequent frame, the EE target is composed via a "rigid
-    bracket" coupling expressed in the operator's head-yaw frame:
-        delta       = R_yaw_inv * (hand_curr_pos - hand_init_pos)
+    bracket" coupling expressed in the operator's head-yaw frame, then rotated by
+    a fixed control-plane correction R_ctrl into the robot base:
+        delta       = R_ctrl * R_yaw_inv * (hand_curr_pos - hand_init_pos)
         target_pos  = ee_init_pos + delta
         target_quat = R_yaw_inv * hand_curr_quat * (hand_init_quat^-1 * R_yaw * ee_init_quat)
-    where R_yaw is the head yaw (about Z) captured at snapshot time. Because the
-    delta is rotated out of the head frame, "reach forward relative to the
-    headset" drives the robot forward (its base/arm forward) no matter which way
-    the operator stands or faces. Moving the hand 10 cm in any head-relative
-    direction moves the EE 10 cm in the matching robot-frame direction; standing
-    still leaves the EE still. The hand's absolute world position is irrelevant.
+    where R_yaw is the head yaw (about Z) captured at snapshot time and R_ctrl is
+    a fixed yaw about the robot's +Z set by --control_yaw_deg (default -90). The
+    OpenXR hand frame sits ~90 deg from the robot base, which made "reach forward"
+    drive the arm sideways (forward->left, right->forward) identically in every
+    view; R_ctrl realigns it so "reach forward" drives the robot forward (+X).
+    Moving the hand 10 cm in a head-relative direction moves the EE 10 cm in the
+    matching robot-frame direction; standing still leaves the EE still. The hand's
+    absolute world position is irrelevant. R_ctrl affects only the horizontal
+    mapping (up/down is untouched); set --control_yaw_deg 0 to disable it.
 
     The head yaw is snapshotted at anchor time, not tracked live, so turning the
     head WHILE teleoperating does not rotate the command frame (head wobble can't
     corrupt commands). If the operator physically re-orients their body, they
-    should re-anchor (reset, or stop->start) to re-capture the facing.
+    should re-anchor (B key, reset, or stop->start) to re-capture the facing.
 
   absolute
     The hand pose (in the anchored OpenXR world frame) is fed directly as the
@@ -284,6 +288,21 @@ parser.add_argument(
         "Disable the debug markers (RGB frames at the IK EE goals and small spheres "
         "at the tracked wrist/thumb/index keypoints). Markers are drawn by default to "
         "aid debugging; pass this flag to turn them off for performance or clutter."
+    ),
+)
+parser.add_argument(
+    "--control_yaw_deg",
+    type=float,
+    default=-90.0,
+    help=(
+        "Yaw (deg, about the robot's +Z) applied to the HAND-MOTION DELTA before it "
+        "drives the EE, in hand_anchored mode. This rotates the control plane so "
+        "'reach forward' maps to the robot's forward (+X) instead of sideways. The "
+        "OpenXR hand frame is rotated ~90 deg from the robot base, which made forward "
+        "hand motion move the arm left and rightward motion move it forward; the "
+        "default -90 cancels that. Only the horizontal mapping is affected (up/down is "
+        "untouched). Set 0 to disable the correction, or flip to +90/180 if your setup "
+        "maps differently. Tune live without code edits."
     ),
 )
 AppLauncher.add_app_launcher_args(parser)
@@ -603,16 +622,31 @@ def main() -> None:
     warmup_complete = False
     warmup_valid_count = 0
 
+    # Control-plane yaw correction. The OpenXR hand frame is rotated ~90 deg about
+    # Z relative to the robot base, so "reach forward" was driving the arm sideways
+    # (forward->left, right->forward) identically across all viewpoints. We rotate
+    # the hand-motion delta by this fixed yaw (about the robot's +Z) before applying
+    # it to the EE, which realigns "forward" with the robot's +X. Default -90 deg;
+    # tunable via --control_yaw_deg (0 disables). Built once here as a wxyz quat.
+    control_yaw_rad = math.radians(float(args_cli.control_yaw_deg))
+    control_corr = torch.tensor(
+        [math.cos(control_yaw_rad / 2.0), 0.0, 0.0, math.sin(control_yaw_rad / 2.0)],
+        dtype=torch.float32,
+        device=args_cli.device,
+    )
+
     # Hand-anchor state. In hand_anchored mode, the EE target is composed as
-    #   delta       = R_yaw_inv * (hand_curr_pos - hand_init_pos)
+    #   delta       = R_ctrl * R_yaw_inv * (hand_curr_pos - hand_init_pos)
     #   target_pos  = ee_init_pos + delta
     #   target_quat = R_yaw_inv * hand_curr_quat * quat_offset
     # where the init poses, quat_offset and the head-yaw quaternion are captured
     # the first frame teleop is actively forwarding actions. R_yaw is the operator's
     # head yaw (about Z) in the anchored frame at snapshot time; pre-multiplying its
     # inverse rotates hand motion from "forward relative to the headset" into the
-    # robot's forward, so the operator can stand/face anywhere. With R_yaw = identity
-    # this reduces to the previous world-locked rigid-bracket coupling.
+    # robot's forward, so the operator can stand/face anywhere. R_ctrl (control_corr)
+    # is the fixed --control_yaw_deg correction that aligns the OpenXR hand plane
+    # with the robot base. With R_yaw = identity and R_ctrl = identity this reduces
+    # to the previous world-locked rigid-bracket coupling.
     # In absolute mode, these stay None and the raw action is forwarded as-is.
     anchor_mode = args_cli.anchor_mode
     anchor_captured = False
@@ -687,6 +721,7 @@ def main() -> None:
         print(
             "[ANCHOR] Captured. "
             f"head_yaw={yaw_deg:+.1f} deg [{head_source}]  "
+            f"ctrl_yaw={args_cli.control_yaw_deg:+.1f} deg  "
             f"L ee0=[{ee_init_pos_l[0]:+.3f}, {ee_init_pos_l[1]:+.3f}, {ee_init_pos_l[2]:+.3f}]  "
             f"R ee0=[{ee_init_pos_r[0]:+.3f}, {ee_init_pos_r[1]:+.3f}, {ee_init_pos_r[2]:+.3f}]  "
             "(EE mirrors head-relative hand delta from now on)"
@@ -802,6 +837,10 @@ def main() -> None:
         print(
             "  Anchor mode: hand_anchored "
             "(EE mirrors head-relative hand DELTA from snapshot at first active frame)"
+        )
+        print(
+            f"  Control yaw: {args_cli.control_yaw_deg:+.1f} deg "
+            "(rotates hand-motion plane so 'forward' -> robot +X; --control_yaw_deg, 0=off)"
         )
     else:
         print(
@@ -954,12 +993,15 @@ def main() -> None:
                         hand_r_quat = pose_part[10:14]
 
                         # Position: rotate the hand delta out of the operator's
-                        # head-yaw frame and into the robot frame, then offset onto
-                        # the EE start pose. "Reach forward relative to the headset"
-                        # -> robot reaches forward, no matter which way the operator
-                        # faces (see _capture_anchor for the frame definition).
-                        target_l_pos = ee_init_pos_l + quat_apply(head_yaw_inv, hand_l_pos - hand_init_pos_l)
-                        target_r_pos = ee_init_pos_r + quat_apply(head_yaw_inv, hand_r_pos - hand_init_pos_r)
+                        # head-yaw frame, then apply the fixed control-plane yaw
+                        # correction (control_corr) that aligns the OpenXR hand frame
+                        # with the robot base, then offset onto the EE start pose.
+                        # "Reach forward" -> robot reaches forward (+X) instead of
+                        # sideways (see _capture_anchor / --control_yaw_deg).
+                        delta_l = quat_apply(control_corr, quat_apply(head_yaw_inv, hand_l_pos - hand_init_pos_l))
+                        delta_r = quat_apply(control_corr, quat_apply(head_yaw_inv, hand_r_pos - hand_init_pos_r))
+                        target_l_pos = ee_init_pos_l + delta_l
+                        target_r_pos = ee_init_pos_r + delta_r
                         # Orientation: head-relative rigid-bracket coupling.
                         #   target = R_yaw_inv * hand_curr * quat_offset
                         target_l_quat = quat_mul(head_yaw_inv, quat_mul(hand_l_quat, quat_offset_l))
