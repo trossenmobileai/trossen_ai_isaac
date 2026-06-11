@@ -32,9 +32,9 @@ This script is purpose-built for VR. Both arms are controlled simultaneously:
     left  hand  -> left  arm  (follower_left_link_6)
     right hand  -> right arm  (follower_right_link_6)
 
-The env action space is 14D absolute IK (left 7D + right 7D, [pos_xyz, quat_wxyz]
-per arm). How the operator's hand poses become EE targets is controlled by
-`--anchor_mode`:
+The env action space is 16D: 14D absolute IK (left 7D + right 7D, [pos_xyz,
+quat_wxyz] per arm) plus 2 binary gripper scalars (left, right). How the
+operator's hand poses become EE targets is controlled by `--anchor_mode`:
 
   hand_anchored (default, recommended for room-scale VR)
     The first frame teleop is actively forwarding actions, the script snapshots
@@ -66,39 +66,49 @@ Pipeline:
     OpenXRDevice.advance()
         -> torch.Tensor of shape [16] in the order declared in MobileAIReachEnvCfg_IK_ABS:
            [L_pose(7), R_pose(7), L_grip(1), R_grip(1)]
-    -> slice [:14] = [L_pose, R_pose]              (raw hand action)
-    -> compose with offsets (hand_anchored) OR pass through (absolute)
-    -> broadcast to [num_envs, 14] and env.step()
+    -> split: pose_part = [:14], grip_part = [14:16]
+    -> compose pose target with offsets (hand_anchored) OR pass through (absolute)
+    -> concat [pose_target(14), grip_part(2)] = 16D
+    -> broadcast to [num_envs, 16] and env.step()
 
-The two gripper retargeter outputs are intentionally NOT fed to the env because the
-env's ActionsCfg has no gripper_action term yet. They are logged for future use.
+The gripper scalars are the GripperRetargeter outputs (+1 open / -1 close, from the
+thumb-index pinch). The env wires them to BinaryJointPositionAction terms on each
+arm's carriage joint (see ik_abs_env_cfg.py).
 
 Activation model:
-    The script auto-starts as soon as hand tracking is stable. A warm-up guard
+    Staged start (default): the script begins INACTIVE. A warm-up guard
     (configurable via --warmup_frames / --warmup_min_pos) waits for both hand
-    positions to be clearly non-zero for N consecutive frames before forwarding
-    actions to the env. This avoids the arms snapping to the OpenXR origin
-    while the operator is still putting the headset on.
+    positions to be clearly non-zero for N consecutive frames, after which a
+    second user at the workstation presses SPACE to engage. The hand<->EE anchor
+    is captured at that moment, so the arms never jump on connect. Pass
+    --autostart to engage automatically once warm-up completes (old behavior).
 
-    In hand_anchored mode, the hand<->EE snapshot is taken at the first frame
-    after warm-up. It is invalidated (and re-taken on the next active frame) on:
-        * env.reset()
-        * STOP -> START transitions (when a teleop_command publisher exists)
-    so the operator can pause, reposition their body, and resume cleanly.
+    Workstation keyboard controls (a plain Se3Keyboard sidecar):
+        SPACE -> start/engage      P -> pause (hold pose; re-anchors on resume)
+        B     -> re-anchor only     R -> reset environment
 
-    The Isaac Lab START/STOP/RESET callbacks remain wired up. They are no-ops
+    In hand_anchored mode, the hand<->EE snapshot is taken on the first active
+    frame and re-taken on env.reset(), P->SPACE (pause/resume), or B (re-anchor),
+    so the operator can pause, reposition or re-orient their body, and resume.
+
+    The Isaac Lab START/STOP/RESET callbacks remain wired up too. They are no-ops
     in an ALVR+SteamVR setup (no CloudXR sample client to publish them) but
     will work automatically if CloudXR or another publisher is added later.
 
 XR anchor (viewpoint placement + frame alignment):
-    XrCfg.anchor_prim_path / anchor_pos / anchor_rot together control where in
-    the sim the operator's headset appears.
+    The --view preset chooses where in the sim the operator's headset appears by
+    setting XrCfg.anchor_prim_path / anchor_pos / anchor_rot:
+        first_person  -> inside the head camera (cam_high_link); robot's-eye view
+        over_shoulder -> behind/above the arms looking forward (base_link)
+        third_person  -> off the front-side looking back at the arms (base_link)
+    Default is third_person (the head-camera FPV can feel cramped on this robot).
+    The preset values are starting points; fine-tune at runtime with the
+    --anchor_pos / --anchor_rot / --anchor_prim_path overrides (which take
+    precedence over the preset). The view is decoupled from control: the
+    hand_anchored mapping is frame-invariant once anchored.
 
-    By default the task config pins the XRAnchor under the robot's head-camera
-    body (`/World/envs/env_0/Robot/cam_high_link`), so the operator gets a true
-    first-person view from the robot's camera stand between the arms. The view
-    follows the prim in world space, so if the robot's base moves, the operator
-    moves with it.
+    The anchor follows its prim in world space, so if the robot's base moves, the
+    operator's viewpoint moves with it.
 
     anchor_pos is then a USD child-transform offset relative to that prim.
     The default `(0, 0, -1.7)` cancels a 1.7 m tall operator's physical headset
@@ -125,9 +135,9 @@ XR anchor (viewpoint placement + frame alignment):
     config to pass `anchor_prim_path=None` to XrCfg.
 
 Prerequisites on the workstation:
-    * Isaac Lab installed and `./isaaclab.sh -p ...` available
+    * Isaac Lab installed and `~/IsaacLab/isaaclab.sh -p ...` available
     * ALVR running, Meta Quest 3 connected, SteamVR providing the OpenXR runtime
-    * Run via `./isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py ...`
+    * Run via `~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py ...`
     * In Isaac Sim's AR panel: set Output Plugin = OpenXR, then click "Start AR"
 
 Launch Isaac Sim Simulator first.
@@ -240,6 +250,40 @@ parser.add_argument(
         "--anchor_prim_path value. The script continues normally afterward."
     ),
 )
+parser.add_argument(
+    "--view",
+    type=str,
+    default="third_person",
+    choices=["first_person", "third_person", "over_shoulder"],
+    help=(
+        "Viewpoint preset. Sets the XR anchor prim + offset + rotation: "
+        "'first_person' = inside the robot's head camera (cam_high_link); "
+        "'over_shoulder' = behind/above the arms looking forward (base_link); "
+        "'third_person' (default) = off to the front-side looking back at the arms "
+        "(base_link). Explicit --anchor_prim_path/--anchor_pos/--anchor_rot override "
+        "the corresponding field of the preset. The preset only affects the view; the "
+        "hand_anchored control mapping is frame-invariant once anchored."
+    ),
+)
+parser.add_argument(
+    "--autostart",
+    action="store_true",
+    help=(
+        "Begin teleoperation automatically once hand tracking warms up, instead of "
+        "waiting for a workstation key press. Default (flag absent) is the staged "
+        "workflow: the operator positions their hands, then a second user at the "
+        "workstation presses SPACE to engage, so the arms never jump on connect."
+    ),
+)
+parser.add_argument(
+    "--no_hand_markers",
+    action="store_true",
+    help=(
+        "Disable the debug markers (RGB frames at the IK EE goals and small spheres "
+        "at the tracked wrist/thumb/index keypoints). Markers are drawn by default to "
+        "aid debugging; pass this flag to turn them off for performance or clutter."
+    ),
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -257,11 +301,22 @@ import math
 import gymnasium as gym
 import torch
 
+import isaaclab.sim as sim_utils
 import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
+from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg
 from isaaclab.devices.openxr import remove_camera_configs
 from isaaclab.devices.teleop_device_factory import create_teleop_device
-from isaaclab.utils.math import quat_apply, quat_conjugate, quat_mul, subtract_frame_transforms, yaw_quat
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.utils.math import (
+    combine_frame_transforms,
+    quat_apply,
+    quat_conjugate,
+    quat_mul,
+    subtract_frame_transforms,
+    yaw_quat,
+)
 from isaaclab_tasks.utils import parse_env_cfg
 
 logger = logging.getLogger(__name__)
@@ -273,13 +328,41 @@ logger = logging.getLogger(__name__)
 #   index   14     -> left  gripper scalar
 #   index   15     -> right gripper scalar
 ACTION_DIM_PER_ARM = 7
-ACTION_DIM_ENV = 2 * ACTION_DIM_PER_ARM  # 14D goes to env.step
-RETARGETER_OUTPUT_DIM = 2 * ACTION_DIM_PER_ARM + 2  # 16D coming out of advance()
+POSE_DIM = 2 * ACTION_DIM_PER_ARM  # 14D of arm poses
+ACTION_DIM_ENV = POSE_DIM + 2  # 16D goes to env.step (poses + 2 grippers)
 LEFT_GRIP_IDX = 14
 RIGHT_GRIP_IDX = 15
 
 LEFT_EE_BODY_NAME = "follower_left_link_6"
 RIGHT_EE_BODY_NAME = "follower_right_link_6"
+
+# Viewpoint presets selected by --view. Each maps to an XR anchor prim, a child
+# transform offset (meters, relative to that prim) and a rotation (wxyz). These
+# are starting points and are expected to be fine-tuned at runtime via the
+# --anchor_pos / --anchor_rot / --anchor_prim_path overrides. The -90 deg yaw
+# (0.7071, 0, 0, -0.7071) aligns OpenXR "forward" (+Y) with the robot "forward"
+# (+X); third_person uses the opposite yaw so the operator looks back at the arms.
+_ENV0_ROBOT = "/World/envs/env_0/Robot"
+VIEW_PRESETS: dict[str, dict] = {
+    "first_person": {
+        "anchor_prim_path": f"{_ENV0_ROBOT}/cam_high_link",
+        "anchor_pos": (0.0, 0.0, -1.7),
+        "anchor_rot": (0.7071068, 0.0, 0.0, -0.7071068),
+    },
+    "over_shoulder": {
+        "anchor_prim_path": f"{_ENV0_ROBOT}/base_link",
+        "anchor_pos": (-0.7, 0.0, 0.5),
+        "anchor_rot": (0.7071068, 0.0, 0.0, -0.7071068),
+    },
+    "third_person": {
+        "anchor_prim_path": f"{_ENV0_ROBOT}/base_link",
+        "anchor_pos": (0.6, -1.0, 0.6),
+        "anchor_rot": (0.7071068, 0.0, 0.0, 0.7071068),
+    },
+}
+
+# Keypoint joints visualized per hand when markers are enabled.
+HAND_KEYPOINT_JOINTS = ("wrist", "thumb_tip", "index_tip")
 
 
 def _get_ee_base_pose(robot, body_idx: int, env_idx: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
@@ -346,6 +429,50 @@ def _get_head_quat(device: torch.device | str) -> torch.Tensor | None:
     )
 
 
+def _get_hand_keypoints() -> list[tuple[float, float, float]] | None:
+    """Read selected hand-joint world positions for debug markers.
+
+    Queries the XR runtime directly (same virtual-world frame the retargeters use)
+    for the joints in :data:`HAND_KEYPOINT_JOINTS`, left hand then right hand.
+
+    Returns a flat list of (x, y, z) world positions ordered
+    [L_wrist, L_thumb_tip, L_index_tip, R_wrist, R_thumb_tip, R_index_tip], or
+    ``None`` if the XR runtime/hands are unavailable. Missing individual joints are
+    skipped, so the list may be shorter than 6.
+    """
+    try:
+        from omni.kit.xr.core import XRCore
+    except ModuleNotFoundError:
+        return None
+
+    xr_core = XRCore.get_singleton() if XRCore is not None else None
+    if xr_core is None:
+        return None
+
+    points: list[tuple[float, float, float]] = []
+    for hand_path in ("/user/hand/left", "/user/hand/right"):
+        hand_device = xr_core.get_input_device(hand_path)
+        if hand_device is None:
+            continue
+        try:
+            joint_poses = hand_device.get_all_virtual_world_poses()
+        except Exception:
+            continue
+        if not joint_poses:
+            continue
+        for joint_name in HAND_KEYPOINT_JOINTS:
+            pose = joint_poses.get(joint_name)
+            if pose is None:
+                continue
+            try:
+                t = pose.pose_matrix.ExtractTranslation()
+            except Exception:
+                continue
+            points.append((float(t[0]), float(t[1]), float(t[2])))
+
+    return points or None
+
+
 def main() -> None:
     """Run dual-arm VR teleoperation."""
     # -- Environment setup --
@@ -358,9 +485,15 @@ def main() -> None:
     env_cfg = remove_camera_configs(env_cfg)
     env_cfg.sim.render.antialiasing_mode = "DLSS"
 
-    # Optional CLI overrides for the OpenXR anchor (frame alignment between the
-    # operator's headset world and the robot base). Applied here so they take
-    # effect before the env (and its OpenXRDevice) is built.
+    # Apply the viewpoint preset first (sets anchor prim/pos/rot), then let any
+    # explicit --anchor_* flags override the corresponding field. Precedence:
+    # explicit flag > --view preset > task-config default. All applied before the
+    # env (and its OpenXRDevice) is built so they take effect on first frame.
+    preset = VIEW_PRESETS[args_cli.view]
+    env_cfg.xr.anchor_prim_path = preset["anchor_prim_path"]
+    env_cfg.xr.anchor_pos = preset["anchor_pos"]
+    env_cfg.xr.anchor_rot = preset["anchor_rot"]
+
     if args_cli.anchor_pos is not None:
         env_cfg.xr.anchor_pos = tuple(args_cli.anchor_pos)
     if args_cli.anchor_rot is not None:
@@ -429,10 +562,12 @@ def main() -> None:
 
     # -- State flags --
     should_reset = False
-    # Auto-start: there is no CloudXR sample client in an ALVR+SteamVR setup to
-    # publish the "START" carb event, so we begin active and gate stepping on
-    # the warm-up guard below. Stop is still respected if a publisher exists.
-    teleoperation_active = True
+    # Staged start: by default we begin INACTIVE so the operator can get their
+    # hands into a comfortable neutral pose first; a workstation key (SPACE) then
+    # engages teleop and the anchor is captured at that pose, so the arms never
+    # jump on connect. --autostart restores the old behavior (engage as soon as
+    # hand tracking warms up). Either way the warm-up guard still gates stepping.
+    teleoperation_active = bool(args_cli.autostart)
     # Warm-up state: only forward actions to env.step() after both hands have
     # reported non-zero positions for `warmup_frames_required` consecutive
     # frames. This prevents the arms from snapping toward (0,0,0) while the
@@ -550,6 +685,14 @@ def main() -> None:
         anchor_captured = False
         print("[TELEOP] Deactivated (robot holds last pose; next START will re-anchor)")
 
+    def reanchor() -> None:
+        nonlocal anchor_captured
+        # Re-snapshot the hand<->EE relationship (and head yaw) on the next active
+        # frame WITHOUT pausing or resetting. Use after physically re-orienting the
+        # body so "forward relative to the headset" maps to robot-forward again.
+        anchor_captured = False
+        print("[ANCHOR] Re-anchor requested -- will re-snapshot on next active frame")
+
     teleoperation_callbacks: dict[str, Callable[[], None]] = {
         "START": start_teleop,
         "STOP": stop_teleop,
@@ -569,11 +712,61 @@ def main() -> None:
         simulation_app.close()
         return
 
+    # -- Workstation keyboard sidecar --
+    # A second user at the workstation drives the session controls (the headset
+    # operator has no keyboard). The OpenXR device's START/STOP/RESET only fire
+    # from CloudXR carb events, which ALVR+SteamVR doesn't publish, so we add a
+    # plain Se3Keyboard purely for its key callbacks (its SE3 motion output is
+    # ignored). Its advance() is pumped each loop so events are processed.
+    #   SPACE -> start/engage teleop      P -> pause (hold pose, re-anchor on resume)
+    #   B     -> re-anchor (no pause)      R -> reset environment
+    keyboard_interface = None
+    try:
+        keyboard_interface = Se3Keyboard(Se3KeyboardCfg())
+        keyboard_interface.add_callback("SPACE", start_teleop)
+        keyboard_interface.add_callback("P", stop_teleop)
+        keyboard_interface.add_callback("B", reanchor)
+        keyboard_interface.add_callback("R", reset_env)
+    except Exception as exc:
+        logger.warning(
+            f"Failed to create keyboard sidecar ({exc}); workstation key controls "
+            "(SPACE/P/B/R) will be unavailable. Teleop can still run, but consider "
+            "--autostart so it engages without a key press."
+        )
+        keyboard_interface = None
+
+    # -- Debug markers (EE goal frames + hand keypoints) --
+    show_markers = not args_cli.no_hand_markers
+    ee_goal_markers = None
+    hand_kp_markers = None
+    if show_markers:
+        try:
+            ee_marker_cfg = FRAME_MARKER_CFG.copy()
+            ee_marker_cfg.markers["frame"].scale = (0.08, 0.08, 0.08)
+            ee_goal_markers = VisualizationMarkers(ee_marker_cfg.replace(prim_path="/Visuals/ee_goals"))
+            hand_kp_markers = VisualizationMarkers(
+                VisualizationMarkersCfg(
+                    prim_path="/Visuals/hand_keypoints",
+                    markers={
+                        "keypoint": sim_utils.SphereCfg(
+                            radius=0.012,
+                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.9, 0.2)),
+                        ),
+                    },
+                )
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to create debug markers ({exc}); continuing without them.")
+            ee_goal_markers = None
+            hand_kp_markers = None
+
     print(f"\nUsing teleop device: {teleop_interface}")
     print("=" * 60)
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
     print(f"  Task:        {args_cli.task}")
-    print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D, absolute IK)")
+    print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D pose + 2 binary grippers)")
+    print(f"  View:        {args_cli.view}")
+    print("  Gripper:     pinch (thumb-index) -> binary open/close per hand")
     if anchor_mode == "hand_anchored":
         print(
             "  Anchor mode: hand_anchored "
@@ -610,8 +803,50 @@ def main() -> None:
         f"  Anchor rot:  ({anchor_rot[0]:+.4f}, {anchor_rot[1]:+.4f}, {anchor_rot[2]:+.4f}, {anchor_rot[3]:+.4f}) wxyz"
         f"{'  (CLI override)' if args_cli.anchor_rot is not None else ''}"
     )
-    print("  STOP/RESET:  available if a teleop_command publisher is present (e.g. CloudXR)")
+    if args_cli.autostart:
+        print("  Start:       autostart (engages as soon as hand tracking warms up)")
+    else:
+        print("  Start:       staged -- position hands, then press SPACE at the workstation")
+    print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
+    if keyboard_interface is not None:
+        print("  Keys:        SPACE=start  P=pause  B=re-anchor  R=reset  (workstation keyboard)")
+    else:
+        print("  Keys:        keyboard sidecar unavailable -- use --autostart to engage")
     print("=" * 60)
+
+    def _draw_debug_markers(target_pose: torch.Tensor | None) -> None:
+        """Update EE-goal frame markers and hand-keypoint sphere markers.
+
+        ``target_pose`` is the 14D IK pose target in the robot base frame (or None
+        when teleop isn't actively stepping). EE goals are converted base->world for
+        drawing; hand keypoints are read from the XR runtime in world frame. Any
+        failure disables markers for the rest of the session rather than crashing.
+        """
+        nonlocal show_markers
+        try:
+            if ee_goal_markers is not None and target_pose is not None:
+                root_pos_w = robot.data.root_pos_w[0].to(target_pose.device).unsqueeze(0)
+                root_quat_w = robot.data.root_quat_w[0].to(target_pose.device).unsqueeze(0)
+                gl_pos, gl_quat = combine_frame_transforms(
+                    root_pos_w, root_quat_w, target_pose[0:3].unsqueeze(0), target_pose[3:7].unsqueeze(0)
+                )
+                gr_pos, gr_quat = combine_frame_transforms(
+                    root_pos_w, root_quat_w, target_pose[7:10].unsqueeze(0), target_pose[10:14].unsqueeze(0)
+                )
+                ee_goal_markers.visualize(
+                    translations=torch.cat([gl_pos, gr_pos], dim=0),
+                    orientations=torch.cat([gl_quat, gr_quat], dim=0),
+                )
+
+            if hand_kp_markers is not None:
+                pts = _get_hand_keypoints()
+                if pts:
+                    hand_kp_markers.visualize(
+                        translations=torch.tensor(pts, dtype=torch.float32, device=args_cli.device)
+                    )
+        except Exception as exc:
+            logger.warning(f"Marker visualization failed ({exc}); disabling markers.")
+            show_markers = False
 
     # -- Reset --
     env.reset()
@@ -623,6 +858,11 @@ def main() -> None:
     while simulation_app.is_running():
         try:
             with torch.inference_mode():
+                # Pump the workstation keyboard so its key callbacks (SPACE/P/B/R)
+                # are processed. We ignore its SE3 motion output.
+                if keyboard_interface is not None:
+                    keyboard_interface.advance()
+
                 # 1D tensor of shape [16]: [L_pose(7), R_pose(7), L_grip(1), R_grip(1)]
                 raw = teleop_interface.advance()
 
@@ -634,45 +874,53 @@ def main() -> None:
                     step_count += 1
                     continue
 
-                action_14d = raw[:ACTION_DIM_ENV].to(dtype=torch.float32, device=args_cli.device)
+                # Full 16D action: [L_pose(7), R_pose(7), L_grip(1), R_grip(1)].
+                action_full = raw[:ACTION_DIM_ENV].to(dtype=torch.float32, device=args_cli.device)
+                pose_part = action_full[:POSE_DIM]  # 14D arm poses
+                grip_part = action_full[POSE_DIM:ACTION_DIM_ENV]  # 2D binary grippers
 
-                # Gripper values are captured for logging / future wiring. They are
-                # NOT inserted into the env action because ActionsCfg.gripper_action
-                # is currently None.
-                left_grip = float(raw[LEFT_GRIP_IDX].item()) if raw.numel() > LEFT_GRIP_IDX else 0.0
-                right_grip = float(raw[RIGHT_GRIP_IDX].item()) if raw.numel() > RIGHT_GRIP_IDX else 0.0
+                # Gripper scalars (+1 open / -1 close) for logging; they are also
+                # forwarded to the env's binary gripper actions via grip_part.
+                left_grip = float(action_full[LEFT_GRIP_IDX].item())
+                right_grip = float(action_full[RIGHT_GRIP_IDX].item())
 
                 # Warm-up gate: only forward actions once both hands have been
                 # reporting non-zero positions for N consecutive frames. Until
                 # then we render only, so the operator can put the headset on
                 # without the arms jumping toward the OpenXR origin.
-                l_pos_norm = float(action_14d[:3].norm().item())
-                r_pos_norm = float(action_14d[7:10].norm().item())
+                l_pos_norm = float(pose_part[:3].norm().item())
+                r_pos_norm = float(pose_part[7:10].norm().item())
                 if not warmup_complete:
                     if l_pos_norm > warmup_min_pos and r_pos_norm > warmup_min_pos:
                         warmup_valid_count += 1
                         if warmup_valid_count >= warmup_frames_required:
                             warmup_complete = True
+                            ready_msg = (
+                                "arms now driven by VR."
+                                if teleoperation_active
+                                else "press SPACE at the workstation to engage."
+                            )
                             print(
                                 f"[WARMUP] Hand tracking stable after "
-                                f"{warmup_valid_count} frames -- arms now driven by VR."
+                                f"{warmup_valid_count} frames -- {ready_msg}"
                             )
                     else:
                         warmup_valid_count = 0
 
                 step_actions = teleoperation_active and warmup_complete
+                target_pose = None  # 14D pose target, kept for marker drawing
                 if step_actions:
                     if anchor_mode == "hand_anchored":
                         # First active frame after warm-up / reset / STOP->START: snap
                         # the hand-EE relationship into place. Subsequent frames will
                         # use the captured offsets so the EE mirrors only hand deltas.
                         if not anchor_captured:
-                            _capture_anchor(action_14d)
+                            _capture_anchor(pose_part)
 
-                        hand_l_pos = action_14d[0:3]
-                        hand_l_quat = action_14d[3:7]
-                        hand_r_pos = action_14d[7:10]
-                        hand_r_quat = action_14d[10:14]
+                        hand_l_pos = pose_part[0:3]
+                        hand_l_quat = pose_part[3:7]
+                        hand_r_pos = pose_part[7:10]
+                        hand_r_quat = pose_part[10:14]
 
                         # Position: rotate the hand delta out of the operator's
                         # head-yaw frame and into the robot frame, then offset onto
@@ -686,15 +934,18 @@ def main() -> None:
                         target_l_quat = quat_mul(head_yaw_inv, quat_mul(hand_l_quat, quat_offset_l))
                         target_r_quat = quat_mul(head_yaw_inv, quat_mul(hand_r_quat, quat_offset_r))
 
-                        target_action = torch.cat(
+                        target_pose = torch.cat(
                             [target_l_pos, target_l_quat, target_r_pos, target_r_quat]
                         )
                     else:
                         # 'absolute' mode: pass the hand pose straight through as the
                         # IK target. Only sensible when the operator's body is meant
                         # to coincide with the robot.
-                        target_action = action_14d
+                        target_pose = pose_part
 
+                    # Assemble the full 16D action: arm poses + the two binary
+                    # gripper scalars straight from the GripperRetargeter.
+                    target_action = torch.cat([target_pose, grip_part])
                     actions = target_action.unsqueeze(0).repeat(env.num_envs, 1)
                     env.step(actions)
                 else:
@@ -702,18 +953,22 @@ def main() -> None:
                     # the viewer freezes while we're waiting on warm-up or paused.
                     env.sim.render()
 
+                # Debug markers: EE goal frames (converted base->world) and the
+                # tracked hand keypoints. Guarded so a viz error never kills teleop.
+                if show_markers:
+                    _draw_debug_markers(target_pose)
+
                 if step_count % 60 == 0:
-                    l_pos = action_14d[:3].tolist()
-                    r_pos = action_14d[7:10].tolist()
+                    l_pos = pose_part[:3].tolist()
+                    r_pos = pose_part[7:10].tolist()
                     if not warmup_complete:
                         state = f"WARMUP {warmup_valid_count}/{warmup_frames_required}"
-                    elif teleoperation_active:
-                        if anchor_mode == "hand_anchored" and not anchor_captured:
-                            state = "ANCHORING"
-                        else:
-                            state = f"ON/{anchor_mode}"
+                    elif not teleoperation_active:
+                        state = "ARMED/WAITING" if not args_cli.autostart else "PAUSED"
+                    elif anchor_mode == "hand_anchored" and not anchor_captured:
+                        state = "ANCHORING"
                     else:
-                        state = "PAUSED"
+                        state = f"ON/{anchor_mode}"
                     print(
                         f"[VR step={step_count} {state}] "
                         f"L_pos={[f'{v:+.3f}' for v in l_pos]} "

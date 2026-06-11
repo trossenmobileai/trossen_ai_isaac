@@ -128,11 +128,22 @@ class CommandsCfg:
 
 @configclass
 class ActionsCfg:
-    """Action specifications — what gets recorded during demonstrations."""
+    """Action specifications — what gets recorded during demonstrations.
+
+    Term declaration order defines the env action-vector layout (the
+    ActionManager concatenates terms in order and skips any left as None). With
+    the gripper terms last, an env that wires both arms plus both grippers gets:
+        [left_arm | right_arm | left_gripper | right_gripper]
+    e.g. 14D absolute IK + 2D binary grippers = 16D for VR teleop.
+    """
 
     left_arm_action: ActionTerm = MISSING
     right_arm_action: ActionTerm = MISSING
+    # Legacy single-gripper slot, kept for compatibility; unused by the dual-arm
+    # configs which declare explicit left/right gripper terms below.
     gripper_action: ActionTerm | None = None
+    left_gripper_action: ActionTerm | None = None
+    right_gripper_action: ActionTerm | None = None
 
 
 @configclass

@@ -43,7 +43,10 @@ from isaaclab.devices.openxr.retargeters import (
     GripperRetargeterCfg,
     Se3AbsRetargeterCfg,
 )
-from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
+from isaaclab.envs.mdp.actions.actions_cfg import (
+    BinaryJointPositionActionCfg,
+    DifferentialInverseKinematicsActionCfg,
+)
 from isaaclab.utils import configclass
 
 from .reach_env_cfg import MobileAIReachEnvCfg
@@ -127,12 +130,32 @@ class MobileAIReachEnvCfg_IK_ABS(MobileAIReachEnvCfg):
             body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=(0.0, 0.0, 0.0)),
         )
 
+        # Wire both grippers as binary open/close actions, driven by the pinch
+        # (thumb-index distance) from each hand's GripperRetargeter. Each carriage
+        # joint travels 0.0 m (closed) to 0.044 m (open); the opposite finger is a
+        # mimic joint in the USD. Declared after the arm actions, so the full env
+        # action vector becomes 16D: [L_pose(7), R_pose(7), L_grip(1), R_grip(1)].
+        self.actions.left_gripper_action = BinaryJointPositionActionCfg(
+            asset_name="robot",
+            joint_names=["follower_left_left_carriage_joint"],
+            open_command_expr={"follower_left_left_carriage_joint": 0.044},
+            close_command_expr={"follower_left_left_carriage_joint": 0.0},
+        )
+        self.actions.right_gripper_action = BinaryJointPositionActionCfg(
+            asset_name="robot",
+            joint_names=["follower_right_left_carriage_joint"],
+            open_command_expr={"follower_right_left_carriage_joint": 0.044},
+            close_command_expr={"follower_right_left_carriage_joint": 0.0},
+        )
+
         # Register the handtracking device. Retargeters are ordered such that
         # advance() returns a 1D tensor of shape [16]:
-        #   indices  0..6   -> left  arm pose  (consumed by env action)
-        #   indices  7..13  -> right arm pose  (consumed by env action)
-        #   index    14     -> left  gripper   (no env slot yet, dropped by script)
-        #   index    15     -> right gripper   (no env slot yet, dropped by script)
+        #   indices  0..6   -> left  arm pose    (consumed by left_arm_action)
+        #   indices  7..13  -> right arm pose    (consumed by right_arm_action)
+        #   index    14     -> left  gripper     (consumed by left_gripper_action)
+        #   index    15     -> right gripper     (consumed by right_gripper_action)
+        # The GripperRetargeter emits +1.0 (open) / -1.0 (close); BinaryJoint-
+        # PositionAction maps value > 0 -> open_command, else close_command.
         #
         # NOTE: enable_visualization=False is a workaround for an Isaac Lab bug in
         # Se3AbsRetargeter._update_visualization, which calls Rotation.from_matrix()
