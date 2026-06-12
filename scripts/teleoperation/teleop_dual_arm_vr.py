@@ -157,7 +157,7 @@ from collections.abc import Callable
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(
-    description="VR hand-tracking teleoperation for the Mobile AI bimanual robot."
+    description="hand-tracking teleoperation for the Mobile AI bimanual robot."
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
 parser.add_argument(
