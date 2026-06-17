@@ -69,6 +69,35 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
         prim_path="/World/light",
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
     )
+    
+    # 1. This creates a clean, perfect simulation table right at the center (0,0)
+    table = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Table",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.99, 2.0, 0.71),  # Width, Length, Height of the table
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.3, 0.3)), # Grey table
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.85, 0.0, 0.355),  # Positioned right in front of the robot base
+        ),
+    )
+
+    # 2. This creates a small 5cm interaction cube resting on top of that table
+    cube = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Cube",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.07, 0.07, 0.07), # 5cm cube
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)), # Red cube
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.85, 0.0, 0.745), # Placed perfectly on the surface of the table
+        ),
+    )
 
     robot: ArticulationCfg = MOBILE_AI_HIGH_PD_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
