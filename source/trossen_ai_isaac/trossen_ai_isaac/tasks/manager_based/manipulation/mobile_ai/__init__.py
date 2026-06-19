@@ -28,5 +28,4 @@
 
 """Mobile AI manipulation task environments."""
 
-from .lift import *
 from .reach import *
