@@ -40,20 +40,22 @@ operator's hand poses become EE targets is controlled by `--anchor_mode`:
     The first frame teleop is actively forwarding actions, the script snapshots
     the operator's hand pose, the robot's current EE pose, AND the operator's
     head yaw. Every subsequent frame, the EE target is composed via a "rigid
-    bracket" coupling expressed in the operator's head-yaw frame, then rotated by
-    a fixed control-plane correction R_ctrl into the robot base:
-        delta       = R_ctrl * R_yaw_inv * (hand_curr_pos - hand_init_pos)
+    bracket" coupling expressed in a single control frame C = R_ctrl · R_yaw_inv:
+        C           = R_ctrl * R_yaw_inv
+        delta       = C * (hand_curr_pos - hand_init_pos)
         target_pos  = ee_init_pos + delta
-        target_quat = R_yaw_inv * hand_curr_quat * (hand_init_quat^-1 * R_yaw * ee_init_quat)
+        target_quat = C * hand_curr_quat * (hand_init_quat^-1 * C^-1 * ee_init_quat)
     where R_yaw is the head yaw (about Z) captured at snapshot time and R_ctrl is
     a fixed yaw about the robot's +Z set by --control_yaw_deg (default -90). The
     OpenXR hand frame sits ~90 deg from the robot base, which made "reach forward"
     drive the arm sideways (forward->left, right->forward) identically in every
     view; R_ctrl realigns it so "reach forward" drives the robot forward (+X).
-    Moving the hand 10 cm in a head-relative direction moves the EE 10 cm in the
-    matching robot-frame direction; standing still leaves the EE still. The hand's
-    absolute world position is irrelevant. R_ctrl affects only the horizontal
-    mapping (up/down is untouched); set --control_yaw_deg 0 to disable it.
+    Crucially, BOTH the position delta and the orientation delta are conjugated by
+    the same frame C, so a hand tilt/roll produces the matching EE tilt/roll
+    rather than a scrambled-axis rotation. Moving the hand 10 cm in a
+    head-relative direction moves the EE 10 cm in the matching robot-frame
+    direction; standing still leaves the EE still. The hand's absolute world
+    position is irrelevant. Set --control_yaw_deg 0 to disable the correction.
 
     The head yaw is snapshotted at anchor time, not tracked live, so turning the
     head WHILE teleoperating does not rotate the command frame (head wobble can't
@@ -189,6 +191,19 @@ parser.add_argument(
         "Per-hand position-vector norm (meters) above which a frame is considered "
         "'live tracking' for warm-up. The OpenXR device defaults all poses to (0,0,0) "
         "before tracking starts, so any threshold > 0 distinguishes live from default."
+    ),
+)
+parser.add_argument(
+    "--pinch_hold_dist",
+    type=float,
+    default=0.08,
+    help=(
+        "Thumb–index distance (meters) below which the arm ORIENTATION is frozen "
+        "while position keeps tracking and only the gripper command changes. "
+        "When fingers close, the Quest tracker re-estimates the wrist, causing a "
+        "TCP orientation snap; holding orientation during the pinch suppresses that. "
+        "On finger release the orientation coupling is re-snapshotted so the wrist "
+        "jump on un-occlusion does not move the EE. Default 0.08 m. Set 0.0 to disable."
     ),
 )
 parser.add_argument(
@@ -494,6 +509,73 @@ def _get_hand_keypoints() -> list[tuple[float, float, float]] | None:
     return points or None
 
 
+def _get_pinch_distances() -> tuple[float | None, float | None]:
+    """Return the thumb–index-tip distance (m) for each hand this frame.
+
+    Reads directly from the XR runtime (same virtual-world frame the retargeters
+    use). Returns ``(left_dist, right_dist)``; a value is ``None`` when that hand's
+    tracking data is unavailable.
+    """
+    try:
+        from omni.kit.xr.core import XRCore
+    except ModuleNotFoundError:
+        return None, None
+
+    xr_core = XRCore.get_singleton() if XRCore is not None else None
+    if xr_core is None:
+        return None, None
+
+    dists: list[float | None] = []
+    for hand_path in ("/user/hand/left", "/user/hand/right"):
+        hand_device = xr_core.get_input_device(hand_path)
+        if hand_device is None:
+            dists.append(None)
+            continue
+        try:
+            joint_poses = hand_device.get_all_virtual_world_poses()
+        except Exception:
+            dists.append(None)
+            continue
+        if not joint_poses:
+            dists.append(None)
+            continue
+        thumb = joint_poses.get("thumb_tip")
+        index = joint_poses.get("index_tip")
+        if thumb is None or index is None:
+            dists.append(None)
+            continue
+        try:
+            tp = thumb.pose_matrix.ExtractTranslation()
+            ip = index.pose_matrix.ExtractTranslation()
+        except Exception:
+            dists.append(None)
+            continue
+
+        # Guard against uninitialized joint data: before hand tracking goes
+        # live, the XR runtime returns (0,0,0) for every joint. The operator
+        # is never at the world origin (the anchor offsets them ~1.7 m), so a
+        # near-zero position is a reliable indicator of invalid tracking.
+        # Returning None lets the latch treat the frame as "no data" (safe,
+        # non-latching) rather than "distance 0 → always pinching".
+        tp_norm = math.sqrt(float(tp[0]) ** 2 + float(tp[1]) ** 2 + float(tp[2]) ** 2)
+        ip_norm = math.sqrt(float(ip[0]) ** 2 + float(ip[1]) ** 2 + float(ip[2]) ** 2)
+        if tp_norm < 0.01 or ip_norm < 0.01:
+            dists.append(None)
+            continue
+
+        dists.append(
+            math.sqrt(
+                (float(tp[0]) - float(ip[0])) ** 2
+                + (float(tp[1]) - float(ip[1])) ** 2
+                + (float(tp[2]) - float(ip[2])) ** 2
+            )
+        )
+
+    left_dist = dists[0] if len(dists) > 0 else None
+    right_dist = dists[1] if len(dists) > 1 else None
+    return left_dist, right_dist
+
+
 def main() -> None:
     """Run dual-arm VR teleoperation."""
     # -- Environment setup --
@@ -622,6 +704,10 @@ def main() -> None:
     warmup_complete = False
     warmup_valid_count = 0
 
+    # Thumb–index distance (m) below which arm ORIENTATION is frozen (position
+    # still tracks) so pinch-induced wrist re-estimation does not snap the TCP.
+    pinch_hold_dist = float(args_cli.pinch_hold_dist)
+
     # Control-plane yaw correction. The OpenXR hand frame is rotated ~90 deg about
     # Z relative to the robot base, so "reach forward" was driving the arm sideways
     # (forward->left, right->forward) identically across all viewpoints. We rotate
@@ -636,17 +722,17 @@ def main() -> None:
     )
 
     # Hand-anchor state. In hand_anchored mode, the EE target is composed as
-    #   delta       = R_ctrl * R_yaw_inv * (hand_curr_pos - hand_init_pos)
+    #   C           = R_ctrl * R_yaw_inv          (captured once at anchor time)
+    #   delta       = C * (hand_curr_pos - hand_init_pos)
     #   target_pos  = ee_init_pos + delta
-    #   target_quat = R_yaw_inv * hand_curr_quat * quat_offset
-    # where the init poses, quat_offset and the head-yaw quaternion are captured
-    # the first frame teleop is actively forwarding actions. R_yaw is the operator's
-    # head yaw (about Z) in the anchored frame at snapshot time; pre-multiplying its
-    # inverse rotates hand motion from "forward relative to the headset" into the
-    # robot's forward, so the operator can stand/face anywhere. R_ctrl (control_corr)
-    # is the fixed --control_yaw_deg correction that aligns the OpenXR hand plane
-    # with the robot base. With R_yaw = identity and R_ctrl = identity this reduces
-    # to the previous world-locked rigid-bracket coupling.
+    #   target_quat = C * hand_curr_quat * quat_offset
+    # where quat_offset = conj(hand_init) * conj(C) * ee_init is pre-baked at
+    # anchor time so both position AND orientation use the same control frame C.
+    # This means a hand tilt/roll maps to the matching EE tilt/roll (no axis
+    # scramble).  R_yaw is the operator's head yaw (about Z) captured at anchor
+    # time; R_ctrl (control_corr) is the fixed --control_yaw_deg correction that
+    # aligns the OpenXR hand plane with the robot base. With both = identity this
+    # reduces to a world-locked rigid-bracket coupling.
     # In absolute mode, these stay None and the raw action is forwarded as-is.
     anchor_mode = args_cli.anchor_mode
     anchor_captured = False
@@ -657,6 +743,10 @@ def main() -> None:
     quat_offset_l: torch.Tensor | None = None
     quat_offset_r: torch.Tensor | None = None
     head_yaw_inv: torch.Tensor | None = None
+    # Full control frame C = R_ctrl · R_yaw_inv, captured at anchor time.
+    # Used (instead of head_yaw_inv alone) for the orientation coupling so that
+    # rotation and translation are always conjugated by the same frame.
+    control_frame: torch.Tensor | None = None
 
     def _capture_anchor(action_14d: torch.Tensor) -> None:
         """Snapshot hand poses, EE poses, and head yaw to define delta anchors.
@@ -669,7 +759,7 @@ def main() -> None:
         where the operator stands or faces.
         """
         nonlocal anchor_captured, hand_init_pos_l, hand_init_pos_r
-        nonlocal ee_init_pos_l, ee_init_pos_r, quat_offset_l, quat_offset_r, head_yaw_inv
+        nonlocal ee_init_pos_l, ee_init_pos_r, quat_offset_l, quat_offset_r, head_yaw_inv, control_frame
 
         hand_l_pos = action_14d[0:3]
         hand_l_quat = action_14d[3:7]
@@ -702,20 +792,29 @@ def main() -> None:
         head_yaw_inv = quat_conjugate(r_yaw)
         yaw_deg = math.degrees(2.0 * math.atan2(float(r_yaw[3]), float(r_yaw[0])))
 
+        # Full control frame: the same composite rotation used to transform position
+        # deltas.  C = R_ctrl · R_yaw_inv  (control_corr may live on a different
+        # device if the script was invoked with --device cpu; move it here).
+        control_frame = quat_mul(control_corr.to(hand_l_pos.device), head_yaw_inv)
+
         hand_init_pos_l = hand_l_pos.clone()
         hand_init_pos_r = hand_r_pos.clone()
         ee_init_pos_l = ee_l_pos.clone()
         ee_init_pos_r = ee_r_pos.clone()
 
-        # Orientation coupling, head-relative. The world-frame hand delta rotation
-        # is dR = hand_curr * conj(hand_init); re-expressing it in the head-yaw
-        # frame and applying it to the EE start orientation gives:
-        #   target = R_yaw_inv * hand_curr * conj(hand_init) * R_yaw * ee_init
+        # Orientation coupling using the same control frame C as the position delta.
+        # The world-frame hand delta is dR = hand_curr · conj(hand_init); expressing
+        # it in frame C and applying it to the EE start orientation gives:
+        #   target = C · dR · conj(C) · ee_init
+        #          = C · hand_curr · conj(hand_init) · conj(C) · ee_init
         # Pre-baking everything except hand_curr into quat_offset:
-        #   quat_offset = conj(hand_init) * R_yaw * ee_init
-        #   target      = R_yaw_inv * hand_curr * quat_offset
-        quat_offset_l = quat_mul(quat_conjugate(hand_l_quat), quat_mul(r_yaw, ee_l_quat))
-        quat_offset_r = quat_mul(quat_conjugate(hand_r_quat), quat_mul(r_yaw, ee_r_quat))
+        #   quat_offset = conj(hand_init) · conj(C) · ee_init
+        #   target      = C · hand_curr · quat_offset
+        # This keeps rotation and translation in the same frame so a hand pitch/roll
+        # produces the matching EE pitch/roll instead of a scrambled-axis rotation.
+        C_conj = quat_conjugate(control_frame)
+        quat_offset_l = quat_mul(quat_conjugate(hand_l_quat), quat_mul(C_conj, ee_l_quat))
+        quat_offset_r = quat_mul(quat_conjugate(hand_r_quat), quat_mul(C_conj, ee_r_quat))
 
         anchor_captured = True
         print(
@@ -877,6 +976,13 @@ def main() -> None:
         print("  Start:       autostart (engages as soon as hand tracking warms up)")
     else:
         print("  Start:       staged -- position hands, then press N at the workstation")
+    if pinch_hold_dist > 0.0:
+        print(
+            f"  Pinch latch: orientation frozen when thumb–index < {pinch_hold_dist:.3f} m "
+            "(position still tracks; --pinch_hold_dist 0 to disable)"
+        )
+    else:
+        print("  Pinch latch: disabled (--pinch_hold_dist 0)")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
     if keyboard_interface is not None:
         print("  Keys:        N=start  M=pause  B=re-anchor  J=reset  (workstation keyboard)")
@@ -917,6 +1023,16 @@ def main() -> None:
         except Exception as exc:
             logger.warning(f"Marker visualization failed ({exc}); disabling markers.")
             show_markers = False
+
+    # Pinch-latch state.  When thumb–index distance drops below `pinch_hold_dist`,
+    # orientation is frozen to the last open-hand value while position keeps
+    # tracking (so the operator can carry objects while gripping).  On release,
+    # quat_offset is re-snapshotted so the wrist jump on finger un-occlusion
+    # does not snap the TCP.
+    latch_l_quat: torch.Tensor | None = None
+    latch_r_quat: torch.Tensor | None = None
+    l_was_pinching = False
+    r_was_pinching = False
 
     # -- Reset --
     env.reset()
@@ -1002,10 +1118,12 @@ def main() -> None:
                         delta_r = quat_apply(control_corr, quat_apply(head_yaw_inv, hand_r_pos - hand_init_pos_r))
                         target_l_pos = ee_init_pos_l + delta_l
                         target_r_pos = ee_init_pos_r + delta_r
-                        # Orientation: head-relative rigid-bracket coupling.
-                        #   target = R_yaw_inv * hand_curr * quat_offset
-                        target_l_quat = quat_mul(head_yaw_inv, quat_mul(hand_l_quat, quat_offset_l))
-                        target_r_quat = quat_mul(head_yaw_inv, quat_mul(hand_r_quat, quat_offset_r))
+                        # Orientation: rigid-bracket coupling in the full control frame C.
+                        #   target = C * hand_curr * quat_offset
+                        # C = R_ctrl · R_yaw_inv is the same frame used for position
+                        # deltas, so a hand pitch/roll maps to the matching EE axis.
+                        target_l_quat = quat_mul(control_frame, quat_mul(hand_l_quat, quat_offset_l))
+                        target_r_quat = quat_mul(control_frame, quat_mul(hand_r_quat, quat_offset_r))
 
                         target_pose = torch.cat(
                             [target_l_pos, target_l_quat, target_r_pos, target_r_quat]
@@ -1015,6 +1133,70 @@ def main() -> None:
                         # IK target. Only sensible when the operator's body is meant
                         # to coincide with the robot.
                         target_pose = pose_part
+
+                    # Pinch latch: freeze ORIENTATION only while pinching so the
+                    # Quest wrist re-estimation artefact does not snap the TCP.
+                    # Position keeps tracking so the operator can move while gripping.
+                    # On release, re-snapshot quat_offset so the wrist jump on finger
+                    # un-occlusion does not move the EE either.
+                    if pinch_hold_dist > 0.0:
+                        l_pinch_dist, r_pinch_dist = _get_pinch_distances()
+                        l_pinching = l_pinch_dist is not None and l_pinch_dist < pinch_hold_dist
+                        r_pinching = r_pinch_dist is not None and r_pinch_dist < pinch_hold_dist
+
+                        # Left arm
+                        if l_pinching and latch_l_quat is not None:
+                            target_pose = torch.cat(
+                                [target_pose[0:3], latch_l_quat, target_pose[7:14]]
+                            )
+                        elif not l_pinching:
+                            if (
+                                l_was_pinching
+                                and latch_l_quat is not None
+                                and anchor_mode == "hand_anchored"
+                            ):
+                                # Release edge: re-snapshot orientation coupling.
+                                hand_l_quat = pose_part[3:7]
+                                C_conj = quat_conjugate(control_frame)
+                                quat_offset_l = quat_mul(
+                                    quat_conjugate(hand_l_quat),
+                                    quat_mul(C_conj, latch_l_quat),
+                                )
+                                target_l_quat = quat_mul(
+                                    control_frame, quat_mul(hand_l_quat, quat_offset_l)
+                                )
+                                target_pose = torch.cat(
+                                    [target_pose[0:3], target_l_quat, target_pose[7:14]]
+                                )
+                            latch_l_quat = target_pose[3:7].clone()
+
+                        # Right arm
+                        if r_pinching and latch_r_quat is not None:
+                            target_pose = torch.cat(
+                                [target_pose[0:7], target_pose[7:10], latch_r_quat]
+                            )
+                        elif not r_pinching:
+                            if (
+                                r_was_pinching
+                                and latch_r_quat is not None
+                                and anchor_mode == "hand_anchored"
+                            ):
+                                hand_r_quat = pose_part[10:14]
+                                C_conj = quat_conjugate(control_frame)
+                                quat_offset_r = quat_mul(
+                                    quat_conjugate(hand_r_quat),
+                                    quat_mul(C_conj, latch_r_quat),
+                                )
+                                target_r_quat = quat_mul(
+                                    control_frame, quat_mul(hand_r_quat, quat_offset_r)
+                                )
+                                target_pose = torch.cat(
+                                    [target_pose[0:7], target_pose[7:10], target_r_quat]
+                                )
+                            latch_r_quat = target_pose[10:14].clone()
+
+                        l_was_pinching = l_pinching
+                        r_was_pinching = r_pinching
 
                     # Assemble the full 16D action: arm poses + the two binary
                     # gripper scalars straight from the GripperRetargeter.
@@ -1061,6 +1243,12 @@ def main() -> None:
                     # operator's hand may be anywhere. The next active frame will
                     # capture a fresh anchor.
                     anchor_captured = False
+                    # Clear pinch latches: the EE is at a new reset pose so any
+                    # previously latched orientation would be stale.
+                    latch_l_quat = None
+                    latch_r_quat = None
+                    l_was_pinching = False
+                    r_was_pinching = False
                     should_reset = False
                     print("[RESET] Done -- waiting for warm-up + re-anchor to re-engage teleop")
 
