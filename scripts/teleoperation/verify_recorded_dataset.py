@@ -39,7 +39,15 @@ import json
 import sys
 from pathlib import Path
 
-import av
+try:
+    import av
+except ImportError as exc:
+    raise SystemExit(
+        "PyAV is required for MP4 checks. Run with your LeRobot venv, e.g.\n"
+        "  ~/lerobot_trossen/.venv/bin/python scripts/teleoperation/verify_recorded_dataset.py ...\n"
+        "Or install: pip install av pyarrow"
+    ) from exc
+
 import pyarrow.parquet as pq
 
 CAMERA_KEYS = ("cam_high", "cam_left_wrist", "cam_right_wrist")

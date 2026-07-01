@@ -30,10 +30,16 @@
 
 Uses ``Isaac-Reach-MobileAI-Record-Play-v0`` for 14D joint obs and three RGB cameras.
 Teleop logic is shared with ``teleop_dual_arm_switch.py`` via ``trossen_ai_isaac.teleop``.
+
+Recording controls (keyboard):
+    N  — toggle episode recording (start / save + reset arms)
+    M  — discard current episode buffer without saving
+    R  — reset environment (discards in-progress recording)
 """
 
 import argparse
 import logging
+import signal
 
 from isaaclab.app import AppLauncher
 
@@ -84,6 +90,11 @@ parser.add_argument(
     default="mobile_ai_reach",
     help="Natural-language task label stored in each frame.",
 )
+parser.add_argument(
+    "--overwrite",
+    action="store_true",
+    help="Replace an existing dataset at --root instead of failing.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -98,12 +109,40 @@ import trossen_ai_isaac.tasks  # noqa: F401
 from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
 from trossen_ai_isaac.teleop.se3_switch import run_se3_switch_loop
+from trossen_ai_isaac.teleop.session import clear_shutdown, request_shutdown
 
 logger = logging.getLogger(__name__)
+
+_recorder_for_signal: LeRobotRecorder | None = None
+_signal_finalized: bool = False
+
+
+def _finalize_on_signal(signum, frame) -> None:
+    """Finalize the dataset and request a graceful teleop loop exit.
+
+    Do not raise SystemExit here — Isaac Kit catches exceptions inside its
+    update/render callbacks, which prevents the process from stopping.
+    """
+    global _signal_finalized
+    del signum, frame
+    request_shutdown()
+    if _recorder_for_signal is not None and not _signal_finalized:
+        print("\n[RECORD] Caught interrupt — finalizing dataset...")
+        _recorder_for_signal.finalize()
+        _signal_finalized = True
+
+
+signal.signal(signal.SIGINT, _finalize_on_signal)
+signal.signal(signal.SIGTERM, _finalize_on_signal)
 
 
 def main() -> None:
     """Run switchable teleop and write LeRobot episodes to disk."""
+    global _recorder_for_signal, _signal_finalized
+
+    clear_shutdown()
+    _signal_finalized = False
+
     env_cfg = make_env_cfg(
         args_cli.task,
         device=args_cli.device,
@@ -124,16 +163,23 @@ def main() -> None:
                 fps=args_cli.fps,
                 task=args_cli.task_description,
                 root=args_cli.root,
+                overwrite=args_cli.overwrite,
             )
         except ImportError as exc:
             logger.error("%s", exc)
             env.close()
             return
+        except FileExistsError as exc:
+            logger.error("%s", exc)
+            env.close()
+            return
 
+        _recorder_for_signal = recorder
         run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=recorder)
     finally:
-        if recorder is not None:
+        if recorder is not None and not _signal_finalized:
             recorder.finalize()
+        _recorder_for_signal = None
         env.close()
 
 

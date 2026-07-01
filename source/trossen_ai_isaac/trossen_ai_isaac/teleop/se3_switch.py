@@ -54,7 +54,7 @@ from trossen_ai_isaac.teleop.mobile_ai_ik_abs import (
     resolve_ee_body_indices,
     warn_action_dim_mismatch,
 )
-from trossen_ai_isaac.teleop.session import TeleopSession
+from trossen_ai_isaac.teleop.session import TeleopSession, shutdown_requested
 
 if TYPE_CHECKING:
     from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 _GP_SWITCH = carb.input.GamepadInput.Y
 _GP_GRIPPER = carb.input.GamepadInput.A
 _GP_RESET = carb.input.GamepadInput.B
+_GP_RECORD = carb.input.GamepadInput.X
 
 
 def gamepad_button_value(input_iface, gamepad, btn: carb.input.GamepadInput) -> float:
@@ -228,18 +229,32 @@ def run_se3_switch_loop(
         print(f"[GRIPPER] {state.active_arm.upper()} gripper -> {g}")
 
     def reset_env() -> None:
+        if recorder is not None and state.session.episode_recording_active:
+            state.session.episode_recording_active = False
+            recorder.discard_episode()
+            print("[RECORD] Recording stopped — episode discarded before reset")
         state.session.request_reset()
         print("[RESET] Environment will reset on next step")
 
-    def save_episode() -> None:
-        if recorder is not None:
-            state.session.request_save_episode()
-            print("[RECORD] Episode will be saved on next step")
+    def toggle_episode_recording() -> None:
+        if recorder is None:
+            return
+        if not state.session.episode_recording_active:
+            recorder.discard_episode()
+            state.session.episode_recording_active = True
+            print("[RECORD] Episode recording started — press N again to save and reset arms")
+            return
+        state.session.episode_recording_active = False
+        recorder.save_episode()
+        state.session.request_reset()
+        print("[RECORD] Episode saved — resetting robot to initial pose")
 
     def discard_episode() -> None:
-        if recorder is not None:
-            state.session.request_discard_episode()
-            print("[RECORD] Episode will be discarded on next step")
+        if recorder is None:
+            return
+        state.session.episode_recording_active = False
+        recorder.discard_episode()
+        print("[RECORD] Episode buffer discarded — recording stopped")
 
     def start_teleop() -> None:
         state.session.start()
@@ -256,8 +271,8 @@ def run_se3_switch_loop(
         "RESET": reset_env,
     }
     if recorder is not None:
-        keyboard_callbacks["E"] = save_episode
-        keyboard_callbacks["X"] = discard_episode
+        keyboard_callbacks["N"] = toggle_episode_recording
+        keyboard_callbacks["M"] = discard_episode
 
     try:
         teleop_interface = build_se3_device(args, env_cfg, keyboard_callbacks)
@@ -279,8 +294,8 @@ def run_se3_switch_loop(
             arm_switch_key_desc = "TAB"
             gripper_key_desc = "K"
             if recorder is not None:
-                teleop_interface.add_callback("E", save_episode)
-                teleop_interface.add_callback("X", discard_episode)
+                teleop_interface.add_callback("N", toggle_episode_recording)
+                teleop_interface.add_callback("M", discard_episode)
         elif isinstance(teleop_interface, Se3Gamepad):
             arm_switch_key_desc = "Y button (polled)"
             gripper_key_desc = "A button (polled)"
@@ -302,7 +317,7 @@ def run_se3_switch_loop(
         except Exception as exc:
             logger.warning("Could not acquire gamepad handle for polling (%s)", exc)
 
-    gp_prev = {_GP_SWITCH: False, _GP_GRIPPER: False, _GP_RESET: False}
+    gp_prev = {_GP_SWITCH: False, _GP_GRIPPER: False, _GP_RESET: False, _GP_RECORD: False}
 
     print(f"\nUsing teleop device: {teleop_interface}")
     print("=" * 60)
@@ -314,7 +329,7 @@ def run_se3_switch_loop(
     print(f"  Gripper:     {gripper_key_desc}  (toggles active arm open/close)")
     print(f"  Reset:       {reset_key_desc}")
     if recorder is not None:
-        print("  Recording:   E=save episode  X=discard  R=reset (auto-save if frames)")
+        print("  Recording:   N=toggle episode (start/save+reset)  M=discard  R=reset")
         print(f"  Dataset:     {recorder.dataset_root}")
     print(f"  Pos scale:   {POS_SCALE}  (tune with --sensitivity)")
     print("=" * 60)
@@ -324,15 +339,18 @@ def run_se3_switch_loop(
     seed_targets_from_ee(state, robot, body_idx_map, dev)
 
     step_count = 0
-    while simulation_app.is_running():
+    while simulation_app.is_running() and not shutdown_requested():
         try:
             with torch.inference_mode():
                 if gp_input_iface is not None and gp_handle is not None:
-                    for btn, action_fn in (
+                    gp_actions = [
                         (_GP_SWITCH, toggle_arm),
                         (_GP_GRIPPER, toggle_gripper),
                         (_GP_RESET, reset_env),
-                    ):
+                    ]
+                    if recorder is not None:
+                        gp_actions.append((_GP_RECORD, toggle_episode_recording))
+                    for btn, action_fn in gp_actions:
                         cur = gamepad_button_value(gp_input_iface, gp_handle, btn) > 0.5
                         if cur and not gp_prev[btn]:
                             action_fn()
@@ -366,7 +384,10 @@ def run_se3_switch_loop(
                     l_pos = [f"{v:+.3f}" for v in state.target_pos[LEFT_ARM].tolist()]
                     r_pos = [f"{v:+.3f}" for v in state.target_pos[RIGHT_ARM].tolist()]
                     mode = "ON" if state.session.teleoperation_active else "PAUSED"
-                    rec = f" frames={recorder.frame_count}" if recorder is not None else ""
+                    rec = ""
+                    if recorder is not None:
+                        rec_state = "REC" if state.session.episode_recording_active else "idle"
+                        rec = f" {rec_state} frames={recorder.frame_count}"
                     print(
                         f"[step={step_count} {mode} arm={state.active_arm.upper()} "
                         f"L_grip={l_grip} R_grip={r_grip}{rec}] "
@@ -376,18 +397,10 @@ def run_se3_switch_loop(
                 env.step(actions)
                 step_count += 1
 
-                if recorder is not None:
+                if recorder is not None and state.session.episode_recording_active:
                     recorder.on_step(env)
 
-                    if state.session.consume_save_episode():
-                        recorder.save_episode()
-
-                    if state.session.consume_discard_episode():
-                        recorder.discard_episode()
-
                 if state.session.consume_reset():
-                    if recorder is not None:
-                        recorder.on_reset(save_if_non_empty=True)
                     env.reset()
                     teleop_interface.reset()
                     seed_targets_from_ee(state, robot, body_idx_map, dev)
@@ -397,8 +410,7 @@ def run_se3_switch_loop(
             logger.error("Simulation step error: %s", exc)
             break
 
-    if recorder is not None:
-        recorder.finalize()
-
+    if shutdown_requested():
+        print("[EXIT] Shutdown requested — leaving teleop loop.")
     env.close()
     print("Environment closed.")

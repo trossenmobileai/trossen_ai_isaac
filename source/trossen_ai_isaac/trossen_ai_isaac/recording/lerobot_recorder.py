@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -53,6 +54,7 @@ class LeRobotRecorder:
         task: str,
         root: str | Path | None = None,
         robot_type: str = "trossen_ai_mobile",
+        overwrite: bool = False,
     ) -> None:
         try:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -61,6 +63,16 @@ class LeRobotRecorder:
                 "LeRobot is required for recording. On Isaac Sim (Python 3.11) install with: "
                 "pip install lerobot==0.4.4 && pip install 'numpy>=1.26,<2'"
             ) from exc
+
+        root_path = Path(root).expanduser() if root is not None else None
+        if root_path is not None and root_path.exists():
+            if overwrite:
+                shutil.rmtree(root_path)
+            else:
+                raise FileExistsError(
+                    f"Dataset root already exists: {root_path}. "
+                    "Pass --overwrite to replace it or choose a new --root."
+                )
 
         self.task = task
         self._frame_count = 0

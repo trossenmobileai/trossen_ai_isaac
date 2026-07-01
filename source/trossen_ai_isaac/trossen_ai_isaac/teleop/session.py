@@ -32,12 +32,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+_shutdown_requested: bool = False
+
+
+def request_shutdown() -> None:
+    """Request a graceful exit from the teleop loop (e.g. on SIGINT)."""
+    global _shutdown_requested
+    _shutdown_requested = True
+
+
+def shutdown_requested() -> bool:
+    """Return True after ``request_shutdown()`` has been called."""
+    return _shutdown_requested
+
+
+def clear_shutdown() -> None:
+    """Reset the shutdown flag (call at session start)."""
+    global _shutdown_requested
+    _shutdown_requested = False
+
 
 @dataclass
 class TeleopSession:
     """High-level teleop session state shared across device backends."""
 
     teleoperation_active: bool = True
+    episode_recording_active: bool = False
     should_reset: bool = False
     should_save_episode: bool = False
     should_discard_episode: bool = False
