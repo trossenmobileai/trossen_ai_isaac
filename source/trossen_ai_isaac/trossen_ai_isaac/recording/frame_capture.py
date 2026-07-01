@@ -26,47 +26,42 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Installation script for the 'trossen_ai_isaac' python package."""
+"""Capture observations from the Mobile AI record environment."""
 
-import os
+from __future__ import annotations
 
-import toml
-from setuptools import find_packages, setup
+import numpy as np
 
-# Obtain the extension data from the extension.toml file
-EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
-# Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(
-    os.path.join(EXTENSION_PATH, "config", "extension.toml")
+from trossen_ai_isaac.recording.schema import CAMERA_KEYS
+from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import (
+    record_joint_pos_14,
 )
 
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "trossen_arm",
-]
 
-# Installation operation
-setup(
-    name="trossen_ai_isaac",
-    packages=find_packages(),
-    author=EXTENSION_TOML_DATA["package"]["author"],
-    maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
-    url=EXTENSION_TOML_DATA["package"]["repository"],
-    version=EXTENSION_TOML_DATA["package"]["version"],
-    description=EXTENSION_TOML_DATA["package"]["description"],
-    keywords=EXTENSION_TOML_DATA["package"]["keywords"],
-    install_requires=INSTALL_REQUIRES,
-    license="BSD-3-Clause",
-    include_package_data=True,
-    python_requires=">=3.10",
-    classifiers=[
-        "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Isaac Sim :: 4.5.0",
-        "Isaac Sim :: 5.0.0",
-        "Isaac Sim :: 5.1.0",
-    ],
-    zip_safe=False,
-)
+def capture_state(env) -> np.ndarray:
+    """Return 14D follower joint positions as a float32 numpy vector."""
+    joints = record_joint_pos_14(env)[0].detach().cpu().numpy().astype(np.float32)
+    return joints
+
+
+def capture_images(env) -> dict[str, np.ndarray]:
+    """Return uint8 HWC RGB images keyed by camera scene name."""
+    images: dict[str, np.ndarray] = {}
+    for cam_key in CAMERA_KEYS:
+        rgb = env.scene[cam_key].data.output["rgb"][0].detach().cpu().numpy()
+        images[cam_key] = np.asarray(rgb, dtype=np.uint8)
+    return images
+
+
+def capture_frame(env, task: str) -> dict:
+    """Bundle state, action (14D joints), images, and task string for LeRobot."""
+    state = capture_state(env)
+    images = capture_images(env)
+    frame = {
+        "observation.state": state,
+        "action": state.copy(),
+        "task": task,
+    }
+    for cam_key, image in images.items():
+        frame[f"observation.images.{cam_key}"] = image
+    return frame

@@ -26,47 +26,51 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Installation script for the 'trossen_ai_isaac' python package."""
+"""Shared teleoperation session flags."""
 
-import os
+from __future__ import annotations
 
-import toml
-from setuptools import find_packages, setup
+from dataclasses import dataclass, field
 
-# Obtain the extension data from the extension.toml file
-EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
-# Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(
-    os.path.join(EXTENSION_PATH, "config", "extension.toml")
-)
 
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "trossen_arm",
-]
+@dataclass
+class TeleopSession:
+    """High-level teleop session state shared across device backends."""
 
-# Installation operation
-setup(
-    name="trossen_ai_isaac",
-    packages=find_packages(),
-    author=EXTENSION_TOML_DATA["package"]["author"],
-    maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
-    url=EXTENSION_TOML_DATA["package"]["repository"],
-    version=EXTENSION_TOML_DATA["package"]["version"],
-    description=EXTENSION_TOML_DATA["package"]["description"],
-    keywords=EXTENSION_TOML_DATA["package"]["keywords"],
-    install_requires=INSTALL_REQUIRES,
-    license="BSD-3-Clause",
-    include_package_data=True,
-    python_requires=">=3.10",
-    classifiers=[
-        "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Isaac Sim :: 4.5.0",
-        "Isaac Sim :: 5.0.0",
-        "Isaac Sim :: 5.1.0",
-    ],
-    zip_safe=False,
-)
+    teleoperation_active: bool = True
+    should_reset: bool = False
+    should_save_episode: bool = False
+    should_discard_episode: bool = False
+
+    def request_reset(self) -> None:
+        self.should_reset = True
+
+    def request_save_episode(self) -> None:
+        self.should_save_episode = True
+
+    def request_discard_episode(self) -> None:
+        self.should_discard_episode = True
+
+    def start(self) -> None:
+        self.teleoperation_active = True
+
+    def stop(self) -> None:
+        self.teleoperation_active = False
+
+    def consume_reset(self) -> bool:
+        if not self.should_reset:
+            return False
+        self.should_reset = False
+        return True
+
+    def consume_save_episode(self) -> bool:
+        if not self.should_save_episode:
+            return False
+        self.should_save_episode = False
+        return True
+
+    def consume_discard_episode(self) -> bool:
+        if not self.should_discard_episode:
+            return False
+        self.should_discard_episode = False
+        return True

@@ -26,10 +26,10 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Dual-arm switchable teleoperation for the Mobile AI robot (IK-Abs, 16D).
+"""Dual-arm teleoperation with LeRobot episode recording (keyboard / gamepad).
 
-Controls the left and right arms one at a time using a single Se3 input device.
-See ``trossen_ai_isaac.teleop.se3_switch`` for implementation details.
+Uses ``Isaac-Reach-MobileAI-Record-Play-v0`` for 14D joint obs and three RGB cameras.
+Teleop logic is shared with ``teleop_dual_arm_switch.py`` via ``trossen_ai_isaac.teleop``.
 """
 
 import argparse
@@ -38,7 +38,7 @@ import logging
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(
-    description="Dual-arm switchable teleoperation for Mobile AI robot (IK-Abs, 16D)."
+    description="Record Mobile AI dual-arm teleop demonstrations to a LeRobot dataset."
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
 parser.add_argument(
@@ -50,8 +50,8 @@ parser.add_argument(
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-Reach-MobileAI-IK-Abs-Play-v0",
-    help="Name of the task. Must be an absolute-IK variant (16D action space).",
+    default="Isaac-Reach-MobileAI-Record-Play-v0",
+    help="Gym task id (must include cameras and 14D joint observations).",
 )
 parser.add_argument("--sensitivity", type=float, default=1.0, help="Sensitivity scale factor.")
 parser.add_argument(
@@ -59,6 +59,30 @@ parser.add_argument(
     type=float,
     default=0.15,
     help="Per-axis dead zone for gamepad stick drift (default 0.15).",
+)
+parser.add_argument(
+    "--repo_id",
+    type=str,
+    required=True,
+    help="LeRobot dataset repo id, e.g. YourUser/trossen_ai_sim_reach.",
+)
+parser.add_argument(
+    "--root",
+    type=str,
+    default=None,
+    help="Optional local root directory for the dataset (defaults to HF cache).",
+)
+parser.add_argument(
+    "--fps",
+    type=int,
+    default=60,
+    help="Dataset FPS; also sets env decimation (60 -> decimation 1, 30 -> decimation 2).",
+)
+parser.add_argument(
+    "--task_description",
+    type=str,
+    default="mobile_ai_reach",
+    help="Natural-language task label stored in each frame.",
 )
 
 AppLauncher.add_app_launcher_args(parser)
@@ -70,6 +94,7 @@ import gymnasium as gym
 
 import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
+from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
 from trossen_ai_isaac.teleop.se3_switch import run_se3_switch_loop
 
@@ -77,8 +102,13 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Run dual-arm switchable IK-Abs teleoperation (no recording)."""
-    env_cfg = make_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
+    """Run switchable teleop and write LeRobot episodes to disk."""
+    env_cfg = make_env_cfg(
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        fps=args_cli.fps,
+    )
     try:
         env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
     except Exception as exc:
@@ -86,7 +116,20 @@ def main() -> None:
         simulation_app.close()
         return
 
-    run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=None)
+    try:
+        recorder = LeRobotRecorder(
+            repo_id=args_cli.repo_id,
+            fps=args_cli.fps,
+            task=args_cli.task_description,
+            root=args_cli.root,
+        )
+    except ImportError as exc:
+        logger.error("%s", exc)
+        env.close()
+        simulation_app.close()
+        return
+
+    run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=recorder)
 
 
 if __name__ == "__main__":
