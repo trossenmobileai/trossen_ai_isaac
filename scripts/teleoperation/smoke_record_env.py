@@ -51,6 +51,7 @@ parser.add_argument(
 )
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+args_cli.enable_cameras = True
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
@@ -85,6 +86,9 @@ def main() -> None:
     for cam_name in CAMERA_KEYS:
         rgb = env.scene[cam_name].data.output["rgb"]
         print(f"{cam_name} rgb shape: {tuple(rgb.shape)} (expected: ({env.num_envs}, 480, 640, 3))")
+        rgb_np = rgb[0].detach().cpu().numpy()
+        assert rgb_np.max() > 10, f"{cam_name} appears black (max={rgb_np.max()})"
+        print(f"{cam_name} pixel range: {rgb_np.min()}–{rgb_np.max()}")
 
     env.close()
     print("Smoke test passed.")

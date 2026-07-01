@@ -58,12 +58,13 @@ class LeRobotRecorder:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
         except ImportError as exc:
             raise ImportError(
-                "LeRobot is required for recording. Install with: "
-                "pip install 'lerobot>=0.5.1'"
+                "LeRobot is required for recording. On Isaac Sim (Python 3.11) install with: "
+                "pip install lerobot==0.4.4 && pip install 'numpy>=1.26,<2'"
             ) from exc
 
         self.task = task
         self._frame_count = 0
+        self._finalized = False
         self._dataset: LeRobotDataset = LeRobotDataset.create(
             repo_id=repo_id,
             fps=fps,
@@ -71,6 +72,7 @@ class LeRobotRecorder:
             robot_type=robot_type,
             root=root,
             use_videos=True,
+            image_writer_threads=4,
         )
         logger.info("LeRobot dataset created at %s (repo_id=%s, fps=%d)", self._dataset.root, repo_id, fps)
 
@@ -115,9 +117,12 @@ class LeRobotRecorder:
             self.discard_episode()
 
     def finalize(self) -> None:
-        """Close writers and flush metadata (call before exit)."""
+        """Close writers and flush metadata (call before exit). Safe to call multiple times."""
+        if self._finalized:
+            return
         if self._frame_count > 0:
             self.save_episode()
         if hasattr(self._dataset, "finalize"):
             self._dataset.finalize()
+        self._finalized = True
         print(f"[RECORD] Finalized dataset at {self.dataset_root}")

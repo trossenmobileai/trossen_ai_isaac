@@ -26,111 +26,99 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Dual-arm teleoperation with LeRobot episode recording (keyboard / gamepad).
+"""Automated short recording smoke test (no teleop).
 
-Uses ``Isaac-Reach-MobileAI-Record-Play-v0`` for 14D joint obs and three RGB cameras.
-Teleop logic is shared with ``teleop_dual_arm_switch.py`` via ``trossen_ai_isaac.teleop``.
+Steps the record env with zero actions, saves one episode, finalizes the dataset,
+and prints the dataset root for follow-up verification with verify_recorded_dataset.py.
 """
 
 import argparse
-import logging
+import shutil
+from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(
-    description="Record Mobile AI dual-arm teleop demonstrations to a LeRobot dataset."
-)
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
-parser.add_argument(
-    "--teleop_device",
-    type=str,
-    default="keyboard",
-    help="Teleop device: keyboard, gamepad, or spacemouse.",
-)
+parser = argparse.ArgumentParser(description="Automated one-episode LeRobot recording smoke test.")
 parser.add_argument(
     "--task",
     type=str,
     default="Isaac-Reach-MobileAI-Record-Play-v0",
-    help="Gym task id (must include cameras and 14D joint observations).",
+    help="Gym task id for the record environment.",
 )
-parser.add_argument("--sensitivity", type=float, default=1.0, help="Sensitivity scale factor.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
 parser.add_argument(
-    "--gamepad_dead_zone",
-    type=float,
-    default=0.15,
-    help="Per-axis dead zone for gamepad stick drift (default 0.15).",
+    "--num_steps",
+    type=int,
+    default=60,
+    help="Number of zero-action steps to record before saving the episode.",
 )
 parser.add_argument(
     "--repo_id",
     type=str,
-    required=True,
-    help="LeRobot dataset repo id, e.g. YourUser/trossen_ai_sim_reach.",
+    default="trossen-admin/trossen_ai_sim_reach_smoke",
+    help="LeRobot dataset repo id.",
 )
 parser.add_argument(
     "--root",
     type=str,
-    default=None,
-    help="Optional local root directory for the dataset (defaults to HF cache).",
+    default="/tmp/trossen_ai_sim_reach_smoke",
+    help="Local root directory for the dataset.",
 )
 parser.add_argument(
     "--fps",
     type=int,
     default=60,
-    help="Dataset FPS; also sets env decimation (60 -> decimation 1, 30 -> decimation 2).",
+    help="Dataset FPS.",
 )
 parser.add_argument(
-    "--task_description",
-    type=str,
-    default="mobile_ai_reach",
-    help="Natural-language task label stored in each frame.",
+    "--overwrite",
+    action="store_true",
+    help="Remove existing dataset root before recording.",
 )
-
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 args_cli.enable_cameras = True
-app_launcher = AppLauncher(vars(args_cli))
+
+app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import gymnasium as gym
-
 import isaaclab_tasks  # noqa: F401
+import torch
 import trossen_ai_isaac.tasks  # noqa: F401
 from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
-from trossen_ai_isaac.teleop.se3_switch import run_se3_switch_loop
-
-logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Run switchable teleop and write LeRobot episodes to disk."""
+    """Record one short zero-action episode and finalize the dataset."""
+    root = Path(args_cli.root).expanduser()
+    if args_cli.overwrite and root.exists():
+        shutil.rmtree(root)
+
     env_cfg = make_env_cfg(
         args_cli.task,
         device=args_cli.device,
         num_envs=args_cli.num_envs,
         fps=args_cli.fps,
     )
-    try:
-        env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
-    except Exception as exc:
-        logger.error("Failed to create environment: %s", exc)
-        return
-
+    env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
     recorder = None
     try:
-        try:
-            recorder = LeRobotRecorder(
-                repo_id=args_cli.repo_id,
-                fps=args_cli.fps,
-                task=args_cli.task_description,
-                root=args_cli.root,
-            )
-        except ImportError as exc:
-            logger.error("%s", exc)
-            env.close()
-            return
-
-        run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=recorder)
+        recorder = LeRobotRecorder(
+            repo_id=args_cli.repo_id,
+            fps=args_cli.fps,
+            task="mobile_ai_reach_smoke",
+            root=str(root),
+        )
+        env.reset()
+        action_dim = env.action_manager.total_action_dim
+        zero_action = torch.zeros(env.num_envs, action_dim, device=env.device)
+        for _ in range(args_cli.num_steps):
+            env.step(zero_action)
+            recorder.on_step(env)
+        recorder.save_episode()
+        print(f"Recorded {args_cli.num_steps} frames to {recorder.dataset_root}")
     finally:
         if recorder is not None:
             recorder.finalize()

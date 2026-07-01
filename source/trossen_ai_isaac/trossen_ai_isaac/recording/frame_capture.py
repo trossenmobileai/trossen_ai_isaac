@@ -49,7 +49,7 @@ def capture_images(env) -> dict[str, np.ndarray]:
     images: dict[str, np.ndarray] = {}
     for cam_key in CAMERA_KEYS:
         rgb = env.scene[cam_key].data.output["rgb"][0].detach().cpu().numpy()
-        images[cam_key] = np.asarray(rgb, dtype=np.uint8)
+        images[cam_key] = np.asarray(rgb, dtype=np.uint8).copy()
     return images
 
 
