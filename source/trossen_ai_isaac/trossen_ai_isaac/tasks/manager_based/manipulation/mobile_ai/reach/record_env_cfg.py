@@ -55,7 +55,7 @@ class MobileAIRecordSceneCfg(MobileAIReachSceneCfg):
     """Reach scene extended with the three RGB cameras used by LeRobot datasets."""
 
     cam_high: CameraCfg = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/cam_high_link/cam_high_color_frame/cam_high_color_optical_frame",
+        prim_path="{ENV_REGEX_NS}/Robot/cam_high_link/cam_high_color_frame/Camera_high",
         update_period=0.0,
         height=480,
         width=640,
@@ -66,7 +66,7 @@ class MobileAIRecordSceneCfg(MobileAIReachSceneCfg):
     cam_left_wrist: CameraCfg = CameraCfg(
         prim_path=(
             "{ENV_REGEX_NS}/Robot/follower_left_camera_link/"
-            "follower_left_camera_color_frame/follower_left_camera_color_optical_frame"
+            "follower_left_camera_color_frame/Camera_follower_left"
         ),
         update_period=0.0,
         height=480,
@@ -78,7 +78,7 @@ class MobileAIRecordSceneCfg(MobileAIReachSceneCfg):
     cam_right_wrist: CameraCfg = CameraCfg(
         prim_path=(
             "{ENV_REGEX_NS}/Robot/follower_right_camera_link/"
-            "follower_right_camera_color_frame/follower_right_camera_color_optical_frame"
+            "follower_right_camera_color_frame/Camera_follower_right"
         ),
         update_period=0.0,
         height=480,
