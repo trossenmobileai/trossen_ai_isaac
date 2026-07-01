@@ -35,6 +35,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from trossen_ai_isaac.recording.frame_capture import capture_frame
 from trossen_ai_isaac.recording.schema import lerobot_features
 
@@ -43,7 +44,76 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
+TROSSEN_AI_2026_FEATURES = {
+    "observation.state": {
+        "dtype": "float32",
+        "shape": (14,),
+        "names": {
+            "motors": [
+                "left_joint_0",
+                "left_joint_1",
+                "left_joint_2",
+                "left_joint_3",
+                "left_joint_4",
+                "left_joint_5",
+                "left_joint_6",
+                "right_joint_0",
+                "right_joint_1",
+                "right_joint_2",
+                "right_joint_3",
+                "right_joint_4",
+                "right_joint_5",
+                "right_joint_6",
+            ]
+        },
+    },
+    "action": {
+        "dtype": "float32",
+        "shape": (14,),
+        "names": {
+            "motors": [
+                "left_joint_0",
+                "left_joint_1",
+                "left_joint_2",
+                "left_joint_3",
+                "left_joint_4",
+                "left_joint_5",
+                "left_joint_6",
+                "right_joint_0",
+                "right_joint_1",
+                "right_joint_2",
+                "right_joint_3",
+                "right_joint_4",
+                "right_joint_5",
+                "right_joint_6",
+            ]
+        },
+    },
+    "observation.images.cam_high": {
+        "dtype": "video",
+        "shape": (480, 640, 3),
+        "names": ["height", "width", "channels"],
+    },
+    "observation.images.cam_left_wrist": {
+        "dtype": "video",
+        "shape": (480, 640, 3),
+        "names": ["height", "width", "channels"],
+    },
+    "observation.images.cam_right_wrist": {
+        "dtype": "video",
+        "shape": (480, 640, 3),
+        "names": ["height", "width", "channels"],
+    },
+}
+#Add the Camera RGB helper in lerobot_recorder.py, near the other recording helpers,
+#and then call it from the step loop in se3_switch.py after env.step
+#The helper belongs with dataset-writing logic,
+#while the actual per-frame camera read should happen in the teleop loop when the new frame exists.
+def get_rgb(camera):
+    rgb = camera.data.output["rgb"][0]
+    if rgb.shape[-1] == 4:
+        rgb = rgb[..., :3]
+    return rgb.detach().cpu().numpy()
 class LeRobotRecorder:
     """Thin wrapper around ``LeRobotDataset`` for per-step sim recording."""
 
@@ -80,7 +150,7 @@ class LeRobotRecorder:
         self._dataset: LeRobotDataset = LeRobotDataset.create(
             repo_id=repo_id,
             fps=fps,
-            features=lerobot_features(),
+            features=TROSSEN_AI_2026_FEATURES,
             robot_type=robot_type,
             root=root,
             use_videos=True,
@@ -138,3 +208,24 @@ class LeRobotRecorder:
             self._dataset.finalize()
         self._finalized = True
         print(f"[RECORD] Finalized dataset at {self.dataset_root}")
+
+
+    def add_frame(self, state, action, cam_high, cam_left_wrist, cam_right_wrist):
+    frame = {
+        "observation.state": state,
+        "action": action,
+        "observation.images.cam_high": cam_high,
+        "observation.images.cam_left_wrist": cam_left_wrist,
+        "observation.images.cam_right_wrist": cam_right_wrist,
+        "task": self.task,
+    }
+    self.current_episode.append(frame)
+
+    #helper functions
+    #current state
+    def get_state_14(robot, joint_ids):
+    return robot.data.joint_pos[0, joint_ids].detach().cpu().numpy()
+
+    #Commanded action
+    def get_action_14(robot, joint_ids):
+    return robot.data.joint_pos_target[0, joint_ids].detach().cpu().numpy()
