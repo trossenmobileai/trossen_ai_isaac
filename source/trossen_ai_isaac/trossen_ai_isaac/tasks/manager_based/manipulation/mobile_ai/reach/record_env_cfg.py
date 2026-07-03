@@ -125,7 +125,9 @@ class RecordObservationsCfg:
 class MobileAIReachEnvCfg_RECORD_PLAY(MobileAIReachEnvCfg_IK_ABS_PLAY):
     """Play variant for IL recording: 60 Hz, 14D joint obs, 3 RGB cameras, no EE commands."""
 
-    scene: MobileAIRecordSceneCfg = MobileAIRecordSceneCfg(num_envs=1, env_spacing=2.5)
+    scene: MobileAIRecordSceneCfg = MobileAIRecordSceneCfg(
+        num_envs=1, env_spacing=2.5, replicate_physics=False
+    )
     observations: RecordObservationsCfg = RecordObservationsCfg()
     # Inherit cube position/color randomization from EventCfg for domain diversity.
     events: EventCfg = EventCfg()

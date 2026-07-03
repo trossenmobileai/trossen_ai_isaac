@@ -35,9 +35,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from trossen_ai_isaac.recording.frame_capture import capture_frame
-from trossen_ai_isaac.recording.schema import lerobot_features
 
 if TYPE_CHECKING:
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -105,15 +103,8 @@ TROSSEN_AI_2026_FEATURES = {
         "names": ["height", "width", "channels"],
     },
 }
-#Add the Camera RGB helper in lerobot_recorder.py, near the other recording helpers,
-#and then call it from the step loop in se3_switch.py after env.step
-#The helper belongs with dataset-writing logic,
-#while the actual per-frame camera read should happen in the teleop loop when the new frame exists.
-def get_rgb(camera):
-    rgb = camera.data.output["rgb"][0]
-    if rgb.shape[-1] == 4:
-        rgb = rgb[..., :3]
-    return rgb.detach().cpu().numpy()
+
+
 class LeRobotRecorder:
     """Thin wrapper around ``LeRobotDataset`` for per-step sim recording."""
 
@@ -208,24 +199,3 @@ class LeRobotRecorder:
             self._dataset.finalize()
         self._finalized = True
         print(f"[RECORD] Finalized dataset at {self.dataset_root}")
-
-
-    def add_frame(self, state, action, cam_high, cam_left_wrist, cam_right_wrist):
-    frame = {
-        "observation.state": state,
-        "action": action,
-        "observation.images.cam_high": cam_high,
-        "observation.images.cam_left_wrist": cam_left_wrist,
-        "observation.images.cam_right_wrist": cam_right_wrist,
-        "task": self.task,
-    }
-    self.current_episode.append(frame)
-
-    #helper functions
-    #current state
-    def get_state_14(robot, joint_ids):
-    return robot.data.joint_pos[0, joint_ids].detach().cpu().numpy()
-
-    #Commanded action
-    def get_action_14(robot, joint_ids):
-    return robot.data.joint_pos_target[0, joint_ids].detach().cpu().numpy()
