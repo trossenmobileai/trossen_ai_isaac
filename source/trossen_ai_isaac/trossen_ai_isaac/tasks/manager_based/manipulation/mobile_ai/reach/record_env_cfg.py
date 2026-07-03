@@ -28,19 +28,21 @@
 
 """IL recording environment for the Mobile AI bimanual robot.
 
-Inherits absolute IK + binary grippers + handtracking from ``MobileAIReachEnvCfg_IK_ABS_PLAY``
-so the same task can later support VR teleoperation with recording (Phase 2). Phase 1 only
-uses the observation and camera pipeline for dataset validation.
+Inherits absolute IK + binary grippers from ``MobileAIReachEnvCfg_IK_ABS_PLAY`` and the
+reach scene (table + cube) from ``MobileAIReachSceneCfg``. Cube position and color are
+randomized on each ``env.reset()`` via ``EventCfg`` unless overridden below.
 """
 
+from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.sensors import CameraCfg
 from isaaclab.utils import configclass
+import isaaclab_tasks.manager_based.manipulation.reach.mdp as mdp
 
-from . import mdp
+from . import mdp as mobile_ai_mdp
 from .ik_abs_env_cfg import MobileAIReachEnvCfg_IK_ABS_PLAY
-from .reach_env_cfg import MobileAIReachSceneCfg
+from .reach_env_cfg import EventCfg, MobileAIReachSceneCfg
 
 
 @configclass
@@ -48,6 +50,20 @@ class EmptyCommandsCfg:
     """No random EE pose commands — IL recording does not use command terms."""
 
     pass
+
+
+@configclass
+class RecordEventCfg:
+    """Reset events for IL recording without cube domain randomization."""
+
+    reset_robot_joints = EventTerm(
+        func=mdp.reset_joints_by_scale,
+        mode="reset",
+        params={
+            "position_range": (1.0, 1.0),
+            "velocity_range": (0.0, 0.0),
+        },
+    )
 
 
 @configclass
@@ -96,7 +112,7 @@ class RecordObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Policy observation group for IL recording."""
 
-        joint_pos = ObsTerm(func=mdp.record_joint_pos_14)
+        joint_pos = ObsTerm(func=mobile_ai_mdp.record_joint_pos_14)
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -111,6 +127,9 @@ class MobileAIReachEnvCfg_RECORD_PLAY(MobileAIReachEnvCfg_IK_ABS_PLAY):
 
     scene: MobileAIRecordSceneCfg = MobileAIRecordSceneCfg(num_envs=1, env_spacing=2.5)
     observations: RecordObservationsCfg = RecordObservationsCfg()
+    # Inherit cube position/color randomization from EventCfg for domain diversity.
+    events: EventCfg = EventCfg()
+    # events: RecordEventCfg = RecordEventCfg()  # use instead to disable cube randomization
 
     def __post_init__(self):
         super().__post_init__()

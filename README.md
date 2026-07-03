@@ -35,6 +35,7 @@ This repository contains NVIDIA Isaac Sim and Isaac Lab integration for Trossen 
 - [Isaac Sim Demo Scripts](#isaac-sim-demo-scripts)
 - [Isaac Lab Demo Tasks](#isaac-lab-demo-tasks)
 - [Controller API](#controller-api)
+- [IL Pipeline Branches](docs/IL_PIPELINE_BRANCHES.md)
 - [Related Links](#related-links)
 
 ---

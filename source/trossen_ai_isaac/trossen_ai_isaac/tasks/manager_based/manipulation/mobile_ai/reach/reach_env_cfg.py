@@ -47,14 +47,11 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
-
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.assets import RigidObjectCfg
-import random
-from pxr import Gf, Usd
 from isaaclab.sim.utils.stage import get_current_stage
-
-
+from pxr import Gf, Usd
+import random
 
 from trossen_ai_isaac.tasks.manager_based.manipulation.assets import MOBILE_AI_HIGH_PD_CFG
 
@@ -65,7 +62,7 @@ from trossen_ai_isaac.tasks.manager_based.manipulation.assets import MOBILE_AI_H
 
 @configclass
 class MobileAIReachSceneCfg(InteractiveSceneCfg):
-    """Scene with only the Mobile AI robot — no table, no objects."""
+    """Mobile AI reach scene: robot, ground, light, table, and interaction cube."""
 
     ground = AssetBaseCfg(
         prim_path="/World/ground",
@@ -77,7 +74,6 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
     )
     
-    # 1. This creates a clean, perfect simulation table right at the center (0,0)
     table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         spawn=sim_utils.CuboidCfg(
@@ -91,12 +87,11 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # 2. This creates a small 5cm interaction cube resting on top of that table
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.07, 0.07, 0.07), # 5cm cube
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)), # Red cube
+            size=(0.07, 0.07, 0.07),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
             collision_props=sim_utils.CollisionPropertiesCfg(),
