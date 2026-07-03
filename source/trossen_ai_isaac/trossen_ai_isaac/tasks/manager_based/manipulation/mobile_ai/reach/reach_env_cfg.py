@@ -48,6 +48,13 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.assets import RigidObjectCfg
+import random
+from pxr import Gf, Usd
+from isaaclab.sim.utils.stage import get_current_stage
+
+
 
 from trossen_ai_isaac.tasks.manager_based.manipulation.assets import MOBILE_AI_HIGH_PD_CFG
 
@@ -68,6 +75,35 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
     light = AssetBaseCfg(
         prim_path="/World/light",
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
+    )
+    
+    # 1. This creates a clean, perfect simulation table right at the center (0,0)
+    table = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Table",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.99, 2.0, 0.71),  # Width, Length, Height of the table
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.3, 0.3)), # Grey table
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.85, 0.0, 0.355),  # Positioned right in front of the robot base
+        ),
+    )
+
+    # 2. This creates a small 5cm interaction cube resting on top of that table
+    cube: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Cube",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.07, 0.07, 0.07), # 5cm cube
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)), # Red cube
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(0.85, 0.0, 0.745), # Placed perfectly on the surface of the table
+        ),
     )
 
     robot: ArticulationCfg = MOBILE_AI_HIGH_PD_CFG.replace(
@@ -175,6 +211,27 @@ class ObservationsCfg:
     policy: PolicyCfg = PolicyCfg()
 
 
+
+
+def randomize_cube_color_discrete(env, env_ids, asset_cfg: SceneEntityCfg, colors: list[tuple[float, float, float]]):
+    """Sets each cube instance to one randomly chosen solid RGB color from `colors`
+    (a true discrete pick — e.g. pure red OR pure green OR pure blue, not a blend)."""
+    asset = env.scene[asset_cfg.name]
+    prim_paths = sim_utils.find_matching_prim_paths(asset.cfg.prim_path)
+    stage = get_current_stage()
+
+    if env_ids is None:
+        env_ids = range(len(prim_paths))
+
+    for env_id in env_ids:
+        prim_path = prim_paths[int(env_id)]
+        cube_prim = stage.GetPrimAtPath(prim_path)
+        chosen_rgb = random.choice(colors)
+        for descendant in Usd.PrimRange(cube_prim):
+            attr = descendant.GetAttribute("inputs:diffuseColor")
+            if attr and attr.IsValid():
+                attr.Set(Gf.Vec3f(*chosen_rgb))
+
 @configclass
 class EventCfg:
     """Reset events between demonstrations."""
@@ -187,6 +244,33 @@ class EventCfg:
             "velocity_range": (0.0, 0.0),
         },
     )
+    
+    
+    randomize_cube_position = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("cube"),
+            "pose_range": {
+                "x": (-0.13, 0.11),
+                "y": (-0.49, 0.46),
+                "z": (0.0, 0.0),
+            },
+            "velocity_range": {},
+        },
+    )
+
+    randomize_cube_color = EventTerm(
+        func=randomize_cube_color_discrete,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("cube"),
+            "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)],
+        },
+    )
+
+
+
     
 @configclass
 class RewardsCfg:
@@ -208,7 +292,7 @@ class TerminationsCfg:
 class MobileAIReachEnvCfg(ManagerBasedRLEnvCfg):
     """Dual-arm Mobile AI environment for IL teleoperation and data collection."""
 
-    scene: MobileAIReachSceneCfg = MobileAIReachSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: MobileAIReachSceneCfg = MobileAIReachSceneCfg(num_envs=4096, env_spacing=2.5, replicate_physics=False)
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     commands: CommandsCfg = CommandsCfg()
