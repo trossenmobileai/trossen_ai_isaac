@@ -32,8 +32,8 @@ Reads joint positions from the leader arm and maps them 1:1 to the sim robot.
 The leader runs in gravity compensation mode for free manual movement.
 
 Usage:
-    ~/isaacsim/python.sh scripts/wxai_leader_to_sim.py
-    ~/isaacsim/python.sh scripts/wxai_leader_to_sim.py --leader_ip 192.168.1.5
+    ~/isaacsim/python.sh scripts/demos/wxai_leader_to_sim.py
+    ~/isaacsim/python.sh scripts/demos/wxai_leader_to_sim.py --leader_ip 192.168.1.5
 """
 
 from __future__ import annotations
@@ -42,6 +42,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 
 parser = argparse.ArgumentParser(
     description="Control simulated WXAI arm using a real leader arm."
@@ -69,7 +70,7 @@ import omni.timeline  # noqa: E402
 from isaacsim.core.simulation_manager import SimulationManager  # noqa: E402
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
 
-sys.path.append(os.path.dirname(__file__))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from controller import RobotType, TrossenAIController  # noqa: E402
 from leader_arm import NUM_ARM_JOINTS, LeaderArmHardware  # noqa: E402
 

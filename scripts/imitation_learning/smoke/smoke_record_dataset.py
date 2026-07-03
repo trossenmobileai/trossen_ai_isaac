@@ -28,13 +28,10 @@
 
 """Automated short recording smoke test (no teleop).
 
-Steps the record env with zero actions, saves one episode, finalizes the dataset,
-and prints the dataset root for follow-up verification with verify_recorded_dataset.py.
+Prints the dataset root for follow-up verification with verify_dataset.py.
 """
 
 import argparse
-import shutil
-from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
@@ -64,17 +61,8 @@ parser.add_argument(
     default="/tmp/trossen_ai_sim_reach_smoke",
     help="Local root directory for the dataset.",
 )
-parser.add_argument(
-    "--fps",
-    type=int,
-    default=60,
-    help="Dataset FPS.",
-)
-parser.add_argument(
-    "--overwrite",
-    action="store_true",
-    help="Remove existing dataset root before recording.",
-)
+parser.add_argument("--fps", type=int, default=60, help="Dataset FPS.")
+parser.add_argument("--overwrite", action="store_true", help="Remove existing dataset root before recording.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 args_cli.enable_cameras = True
@@ -82,47 +70,23 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
-import torch
 import trossen_ai_isaac.tasks  # noqa: F401
-from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
-from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
+from trossen_ai_isaac.recording.smoke import run_zero_action_dataset_smoke
 
 
 def main() -> None:
     """Record one short zero-action episode and finalize the dataset."""
-    root = Path(args_cli.root).expanduser()
-    if args_cli.overwrite and root.exists():
-        shutil.rmtree(root)
-
-    env_cfg = make_env_cfg(
+    run_zero_action_dataset_smoke(
         args_cli.task,
         device=args_cli.device,
         num_envs=args_cli.num_envs,
+        num_steps=args_cli.num_steps,
+        repo_id=args_cli.repo_id,
+        root=args_cli.root,
         fps=args_cli.fps,
+        overwrite=args_cli.overwrite,
     )
-    env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
-    recorder = None
-    try:
-        recorder = LeRobotRecorder(
-            repo_id=args_cli.repo_id,
-            fps=args_cli.fps,
-            task="mobile_ai_reach_smoke",
-            root=str(root),
-        )
-        env.reset()
-        action_dim = env.action_manager.total_action_dim
-        zero_action = torch.zeros(env.num_envs, action_dim, device=env.device)
-        for _ in range(args_cli.num_steps):
-            env.step(zero_action)
-            recorder.on_step(env)
-        recorder.save_episode()
-        print(f"Recorded {args_cli.num_steps} frames to {recorder.dataset_root}")
-    finally:
-        if recorder is not None:
-            recorder.finalize()
-        env.close()
 
 
 if __name__ == "__main__":

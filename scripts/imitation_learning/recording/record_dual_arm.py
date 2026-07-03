@@ -26,10 +26,12 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Dual-arm switchable teleoperation for the Mobile AI robot (IK-Abs, 16D).
+"""Dual-arm teleoperation with LeRobot episode recording (keyboard / gamepad).
 
-Controls the left and right arms one at a time using a single Se3 input device.
-See ``trossen_ai_isaac.teleop.se3_switch`` for implementation details.
+Recording controls (keyboard):
+    N  — toggle episode recording (start / save + reset arms)
+    M  — discard current episode buffer without saving
+    R  — reset environment (discards in-progress recording)
 """
 
 import argparse
@@ -46,12 +48,15 @@ from teleop_cli_loader import load_teleop_cli
 teleop_cli = load_teleop_cli()
 
 parser = argparse.ArgumentParser(
-    description="Dual-arm switchable teleoperation for Mobile AI robot (IK-Abs, 16D)."
+    description="Record Mobile AI dual-arm teleop demonstrations to a LeRobot dataset."
 )
 teleop_cli.add_mobile_ai_teleop_args(parser)
+parser.set_defaults(task="Isaac-Reach-MobileAI-Record-Play-v0")
+teleop_cli.add_record_args(parser)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+args_cli.enable_cameras = True
 app_launcher = AppLauncher(vars(args_cli))
 simulation_app = app_launcher.app
 
@@ -59,25 +64,58 @@ import gymnasium as gym
 
 import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
+from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
+from trossen_ai_isaac.recording.runtime import install_recording_signal_handlers, run_recording_session
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
 from trossen_ai_isaac.teleop.se3_switch import run_se3_switch_loop
 
 logger = logging.getLogger(__name__)
 
+install_recording_signal_handlers()
+
 
 def main() -> None:
-    """Run dual-arm switchable IK-Abs teleoperation (no recording)."""
-    env_cfg = make_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
+    """Run switchable teleop and write LeRobot episodes to disk."""
+    env_cfg = make_env_cfg(
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        fps=args_cli.fps,
+    )
     try:
         env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
     except Exception as exc:
         logger.error("Failed to create environment: %s", exc)
-        simulation_app.close()
         return
 
-    run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=None)
+    try:
+        recorder = LeRobotRecorder(
+            repo_id=args_cli.repo_id,
+            fps=args_cli.fps,
+            task=args_cli.task_description,
+            root=args_cli.root,
+            overwrite=args_cli.overwrite,
+        )
+    except (ImportError, FileExistsError) as exc:
+        logger.error("%s", exc)
+        env.close()
+        return
+
+    try:
+        run_recording_session(
+            simulation_app,
+            env,
+            env_cfg,
+            args_cli,
+            recorder,
+            run_se3_switch_loop,
+        )
+    finally:
+        env.close()
 
 
 if __name__ == "__main__":
-    main()
-    simulation_app.close()
+    try:
+        main()
+    finally:
+        simulation_app.close()

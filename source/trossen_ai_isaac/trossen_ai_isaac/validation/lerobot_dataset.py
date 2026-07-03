@@ -26,25 +26,19 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Offline validation for a recorded Mobile AI LeRobot dataset.
-
-Checks schema metadata, parquet integrity, MP4 pixel content, and optional
-LeRobotDataset round-trip loading. Does not require Isaac Sim.
-"""
+"""LeRobot dataset validation for Mobile AI sim recordings."""
 
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from pathlib import Path
 
 try:
     import av
 except ImportError as exc:
-    raise SystemExit(
+    raise ImportError(
         "PyAV is required for MP4 checks. Run with your LeRobot venv, e.g.\n"
-        "  ~/lerobot_trossen/.venv/bin/python scripts/teleoperation/verify_recorded_dataset.py ...\n"
+        "  ~/lerobot_trossen/.venv/bin/python ...\n"
         "Or install: pip install av pyarrow"
     ) from exc
 
@@ -164,47 +158,17 @@ def _check_lerobot_load(root: Path, repo_id: str | None) -> None:
     print(f"[OK] LeRobotDataset load: {len(ds)} frames, cam_high max={pix_max:.1f}")
 
 
-def main() -> int:
-    """Run all dataset integrity checks."""
-    parser = argparse.ArgumentParser(description="Verify a recorded Mobile AI LeRobot dataset.")
-    parser.add_argument(
-        "--root",
-        type=str,
-        required=True,
-        help="Local root directory of the dataset.",
-    )
-    parser.add_argument(
-        "--repo_id",
-        type=str,
-        default=None,
-        help="LeRobot repo id (defaults to the root directory name).",
-    )
-    parser.add_argument(
-        "--skip-lerobot",
-        action="store_true",
-        help="Skip LeRobotDataset round-trip load.",
-    )
-    args = parser.parse_args()
 
-    root = Path(args.root).expanduser().resolve()
+
+def verify_dataset(root: Path | str, repo_id: str | None = None, *, skip_lerobot: bool = False) -> None:
+    """Validate a recorded LeRobot dataset; raise on failure."""
+    root = Path(root).expanduser().resolve()
     if not root.is_dir():
-        print(f"[FAIL] Dataset root does not exist: {root}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Dataset root does not exist: {root}")
 
-    try:
-        info = _check_info(root)
-        _check_parquet_dir("data", root / "data")
-        _check_parquet_dir("episodes", root / "meta" / "episodes")
-        _check_videos(root, info)
-        if not args.skip_lerobot:
-            _check_lerobot_load(root, args.repo_id)
-    except Exception as exc:
-        print(f"[FAIL] {exc}", file=sys.stderr)
-        return 1
-
-    print("All checks passed.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    info = _check_info(root)
+    _check_parquet_dir("data", root / "data")
+    _check_parquet_dir("episodes", root / "meta" / "episodes")
+    _check_videos(root, info)
+    if not skip_lerobot:
+        _check_lerobot_load(root, repo_id)

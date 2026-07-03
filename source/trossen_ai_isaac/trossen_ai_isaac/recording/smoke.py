@@ -26,49 +26,33 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Smoke test for the Mobile AI IL record environment.
+"""Shared zero-action smoke helpers for the Mobile AI record environment."""
 
-Validates 14D policy observations and three 640x480 RGB camera streams without VR.
-"""
+from __future__ import annotations
 
-import argparse
-
-from isaaclab.app import AppLauncher
-
-parser = argparse.ArgumentParser(description="Smoke test for Mobile AI record environment.")
-parser.add_argument(
-    "--task",
-    type=str,
-    default="Isaac-Reach-MobileAI-Record-Play-v0",
-    help="Gym task id for the record environment.",
-)
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
-parser.add_argument(
-    "--num_steps",
-    type=int,
-    default=60,
-    help="Number of zero-action steps to run after reset.",
-)
-AppLauncher.add_app_launcher_args(parser)
-args_cli = parser.parse_args()
-args_cli.enable_cameras = True
-
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
+import shutil
+from pathlib import Path
 
 import gymnasium as gym
-import isaaclab_tasks  # noqa: F401
 import torch
-import trossen_ai_isaac.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
+
+from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
+from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
 
 CAMERA_KEYS = ("cam_high", "cam_left_wrist", "cam_right_wrist")
 
 
-def main() -> None:
-    """Create the record env, step with zero actions, and print obs/camera shapes."""
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
-    env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+def run_zero_action_env_smoke(
+    task: str,
+    *,
+    device: str,
+    num_envs: int = 1,
+    num_steps: int = 60,
+) -> None:
+    """Step the record env with zero actions and validate obs/camera shapes."""
+    env_cfg = parse_env_cfg(task, device=device, num_envs=num_envs)
+    env = gym.make(task, cfg=env_cfg).unwrapped
 
     obs, _ = env.reset()
     policy_obs = obs["policy"]
@@ -77,25 +61,62 @@ def main() -> None:
     action_dim = env.action_manager.total_action_dim
     zero_action = torch.zeros(env.num_envs, action_dim, device=env.device)
 
-    for _ in range(args_cli.num_steps):
+    for _ in range(num_steps):
         obs, _, _, _, _ = env.step(zero_action)
 
     policy_obs = obs["policy"]
-    print(f"obs['policy'] after {args_cli.num_steps} steps: {tuple(policy_obs.shape)}")
+    print(f"obs['policy'] after {num_steps} steps: {tuple(policy_obs.shape)}")
 
     for cam_name in CAMERA_KEYS:
         rgb = env.scene[cam_name].data.output["rgb"]
         print(f"{cam_name} rgb shape: {tuple(rgb.shape)} (expected: ({env.num_envs}, 480, 640, 3))")
         rgb_np = rgb[0].detach().cpu().numpy()
-        assert rgb_np.max() > 10, f"{cam_name} appears black (max={rgb_np.max()})"
+        if rgb_np.max() <= 10:
+            raise AssertionError(f"{cam_name} appears black (max={rgb_np.max()})")
         print(f"{cam_name} pixel range: {rgb_np.min()}–{rgb_np.max()}")
 
     env.close()
     print("Smoke test passed.")
 
 
-if __name__ == "__main__":
+def run_zero_action_dataset_smoke(
+    task: str,
+    *,
+    device: str,
+    num_envs: int = 1,
+    num_steps: int = 60,
+    repo_id: str,
+    root: str | Path,
+    fps: int = 60,
+    task_description: str = "mobile_ai_reach_smoke",
+    overwrite: bool = False,
+) -> Path:
+    """Record one short zero-action episode and finalize the dataset."""
+    root_path = Path(root).expanduser()
+    if overwrite and root_path.exists():
+        shutil.rmtree(root_path)
+
+    env_cfg = make_env_cfg(task, device=device, num_envs=num_envs, fps=fps)
+    env = gym.make(task, cfg=env_cfg).unwrapped
+    recorder = None
     try:
-        main()
+        recorder = LeRobotRecorder(
+            repo_id=repo_id,
+            fps=fps,
+            task=task_description,
+            root=str(root_path),
+            overwrite=overwrite,
+        )
+        env.reset()
+        action_dim = env.action_manager.total_action_dim
+        zero_action = torch.zeros(env.num_envs, action_dim, device=env.device)
+        for _ in range(num_steps):
+            env.step(zero_action)
+            recorder.on_step(env)
+        recorder.save_episode()
+        print(f"Recorded {num_steps} frames to {recorder.dataset_root}")
+        return Path(recorder.dataset_root)
     finally:
-        simulation_app.close()
+        if recorder is not None:
+            recorder.finalize()
+        env.close()

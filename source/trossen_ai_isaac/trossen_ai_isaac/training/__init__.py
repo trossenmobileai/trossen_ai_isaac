@@ -26,14 +26,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Teleoperation helpers for the Mobile AI bimanual robot."""
+"""Training smoke-test helpers."""
 
-__all__ = [
-    "add_mobile_ai_teleop_args",
-    "add_record_args",
-    "make_env_cfg",
-    "run_se3_switch_loop",
-    "run_vr_teleop_loop",
-    "clear_shutdown",
-    "request_shutdown",
-]
+from trossen_ai_isaac.training.smoke_act import run_smoke_act
+
+__all__ = ["run_smoke_act"]

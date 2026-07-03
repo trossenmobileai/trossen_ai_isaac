@@ -79,6 +79,7 @@ simulation_app = app_launcher.app
 
 import os  # noqa: E402
 import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
@@ -91,7 +92,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from leader_arm import NUM_ARM_JOINTS, LeaderArmHardware  # noqa: E402
 
 logger = logging.getLogger(__name__)

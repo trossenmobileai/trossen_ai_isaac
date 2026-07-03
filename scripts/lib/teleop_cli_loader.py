@@ -26,14 +26,23 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Teleoperation helpers for the Mobile AI bimanual robot."""
+"""Load ``teleop/cli.py`` before Isaac ``AppLauncher`` without importing the package root."""
 
-__all__ = [
-    "add_mobile_ai_teleop_args",
-    "add_record_args",
-    "make_env_cfg",
-    "run_se3_switch_loop",
-    "run_vr_teleop_loop",
-    "clear_shutdown",
-    "request_shutdown",
-]
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from types import ModuleType
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CLI_PATH = _REPO_ROOT / "source/trossen_ai_isaac/trossen_ai_isaac/teleop/cli.py"
+
+
+def load_teleop_cli() -> ModuleType:
+    """Return the teleop CLI helper module (argparse only; safe pre-AppLauncher)."""
+    spec = importlib.util.spec_from_file_location("trossen_ai_isaac_teleop_cli", _CLI_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load teleop CLI module from {_CLI_PATH}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod

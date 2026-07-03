@@ -2,6 +2,19 @@
 
 Integration branch: **`feat/il-pipeline-integration`** (Phases 1–2 recording + Phase 4 scene).
 
+## Repository layout (scripts vs package)
+
+| Path | Role |
+|------|------|
+| `scripts/teleoperation/` | Runnable teleop CLIs (`isaaclab.sh -p`) |
+| `scripts/imitation_learning/` | Recording, dataset QA, training smoke |
+| `scripts/demos/` | Standalone Isaac Sim demos (`isaacsim/python.sh`) |
+| `scripts/lib/` | Shared helpers for demos (`controller.py`, `leader_arm.py`) |
+| `source/trossen_ai_isaac/trossen_ai_isaac/teleop/` | Teleop **library** (loops, session, VR) |
+| `source/trossen_ai_isaac/trossen_ai_isaac/recording/` | LeRobot writer, frame capture, smokes |
+| `source/trossen_ai_isaac/trossen_ai_isaac/validation/` | Offline dataset checks |
+| `source/trossen_ai_isaac/trossen_ai_isaac/training/` | Training smoke helpers |
+
 ## Active branches
 
 | Branch | Phase | Status |
@@ -30,22 +43,30 @@ This branch is **superseded by `feat/il-record-phase2`**. Do not merge it.
 | Phase | Work | Suggested branch |
 |-------|------|------------------|
 | 3 | VR teleop + LeRobot recording (`teleop_dual_arm_vr.py`) | `feat/il-record-vr` off integration |
-| 4 training | `lerobot-train` ACT on sim datasets | `lerobot_trossen` repo |
+| 4 training | `lerobot-train` ACT on sim datasets | `lerobot_train` conda env — smoke: `smoke_train_act.py` |
 
 ## Recording quick reference
 
 ```bash
 # Smoke test (Isaac Sim required)
-~/IsaacLab/isaaclab.sh -p scripts/teleoperation/smoke_record_env.py \
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/smoke/smoke_record_env.py \
   --task Isaac-Reach-MobileAI-Record-Play-v0 --enable_cameras
 
+# Automated one-episode dataset smoke
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/smoke/smoke_record_dataset.py \
+  --task Isaac-Reach-MobileAI-Record-Play-v0 --enable_cameras --overwrite
+
 # Record demonstrations
-~/IsaacLab/isaaclab.sh -p scripts/teleoperation/record_dual_arm.py \
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm.py \
   --task Isaac-Reach-MobileAI-Record-Play-v0 \
   --repo_id USER/dataset_name --root ~/lerobot_trossen/datasets/dataset_name \
   --fps 60 --enable_cameras
 
 # Verify dataset (LeRobot venv, not system python3)
-~/lerobot_trossen/.venv/bin/python scripts/teleoperation/verify_recorded_dataset.py \
+~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/validation/verify_dataset.py \
+  --root ~/lerobot_trossen/datasets/dataset_name --repo_id USER/dataset_name
+
+# Training smoke (train: lerobot_train conda; verify uses installed package)
+python scripts/imitation_learning/training/smoke_train_act.py \
   --root ~/lerobot_trossen/datasets/dataset_name --repo_id USER/dataset_name
 ```

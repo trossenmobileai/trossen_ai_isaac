@@ -32,11 +32,11 @@ Robot Bringup Script for Isaac Sim
 This script loads a Trossen robot model into Isaac Sim with a ground plane.
 
 Usage:
-    ~/isaacsim/isaac-sim.sh scripts/robot_bringup.py [robot_name]
+    ~/isaacsim/isaac-sim.sh scripts/demos/robot_bringup.py [robot_name]
 
 Examples:
-    ~/isaacsim/isaac-sim.sh scripts/robot_bringup.py wxai_base
-    ~/isaacsim/isaac-sim.sh scripts/robot_bringup.py stationary_ai
+    ~/isaacsim/isaac-sim.sh scripts/demos/robot_bringup.py wxai_base
+    ~/isaacsim/isaac-sim.sh scripts/demos/robot_bringup.py stationary_ai
 
 Available Robots:
     - mobile_ai: Dual-arm mobile manipulator

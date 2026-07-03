@@ -26,14 +26,13 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Teleoperation helpers for the Mobile AI bimanual robot."""
+"""Add ``scripts/lib`` to ``sys.path`` for demo and teleop helper imports."""
 
-__all__ = [
-    "add_mobile_ai_teleop_args",
-    "add_record_args",
-    "make_env_cfg",
-    "run_se3_switch_loop",
-    "run_vr_teleop_loop",
-    "clear_shutdown",
-    "request_shutdown",
-]
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_LIB_DIR = Path(__file__).resolve().parent
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))

@@ -33,13 +33,14 @@ This script demonstrates continuous target tracking where the robot's end
 effector follows a manually movable target cube.
 
 Usage:
-    ~/isaacsim/python.sh scripts/wxai_follow_target.py
+    ~/isaacsim/python.sh scripts/demos/wxai_follow_target.py
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 from isaacsim import SimulationApp
 
@@ -55,7 +56,7 @@ from isaacsim.core.experimental.prims import GeomPrim  # noqa: E402
 from isaacsim.core.simulation_manager import SimulationManager  # noqa: E402
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
 
-sys.path.append(os.path.dirname(__file__))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from controller import RobotType, TrossenAIController  # noqa: E402
 
 # Default target configuration

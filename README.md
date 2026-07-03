@@ -31,9 +31,12 @@ This repository contains NVIDIA Isaac Sim and Isaac Lab integration for Trossen 
 
 - [Overview](#overview)
 - [Installation](#installation)
+- [Repository Layout](#repository-layout)
 - [Robot Assets](#robot-assets)
 - [Isaac Sim Demo Scripts](#isaac-sim-demo-scripts)
 - [Isaac Lab Demo Tasks](#isaac-lab-demo-tasks)
+- [Teleoperation](#teleoperation)
+- [Imitation Learning Pipeline](#imitation-learning-pipeline)
 - [Controller API](#controller-api)
 - [IL Pipeline Branches](docs/IL_PIPELINE_BRANCHES.md)
 - [Related Links](#related-links)
@@ -78,7 +81,47 @@ You should see output similar to:
 | 8  | Isaac-Reach-WXAI-Play-v0       | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.joint_pos_env_cfg:WXAIReachEnvCfg_PLAY   |
 | 9  | Isaac-Reach-WXAI-IK-Rel-v0     | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.ik_rel_env_cfg:WXAIReachEnvCfg           |
 | 10 | Isaac-Reach-WXAI-IK-Abs-v0     | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.ik_abs_env_cfg:WXAIReachEnvCfg           |
+| 11 | Isaac-Reach-MobileAI-IK-Abs-Play-v0 | isaaclab.envs:ManagerBasedRLEnv | ... Mobile AI VR / keyboard teleop |
+| 12 | Isaac-Reach-MobileAI-Record-Play-v0 | isaaclab.envs:ManagerBasedRLEnv | ... Mobile AI IL recording (14D obs + 3 cameras) |
 ```
+
+---
+
+## Repository Layout
+
+Runnable scripts live under `scripts/`; reusable logic lives in the installed `trossen_ai_isaac` package.
+
+```
+scripts/
+├── teleoperation/              # Human-in-the-loop control (isaaclab.sh -p)
+├── imitation_learning/         # Recording, dataset QA, training smoke
+│   ├── recording/record_dual_arm.py
+│   ├── smoke/smoke_record_env.py, smoke_record_dataset.py
+│   ├── validation/verify_dataset.py
+│   └── training/smoke_train_act.py
+├── demos/                      # Standalone Isaac Sim scripts (isaacsim/python.sh)
+├── lib/                        # controller.py, leader_arm.py (used by demos)
+├── reinforcement_learning/     # RSL-RL train/play
+└── tools/list_envs.py
+
+source/trossen_ai_isaac/trossen_ai_isaac/
+├── teleop/                     # Library: loops, session, CLI helpers, VR package
+├── recording/                  # Library: LeRobot writer, smokes, runtime
+├── validation/                 # Offline LeRobot dataset checks
+└── training/                   # ACT training smoke helpers
+```
+
+| Location | Role | How you run it |
+|----------|------|----------------|
+| `scripts/teleoperation/` | Teleop **entrypoints** | `~/IsaacLab/isaaclab.sh -p scripts/teleoperation/...` |
+| `scripts/imitation_learning/` | IL **entrypoints** | `isaaclab.sh -p` (recording) or plain Python (verify/train) |
+| `source/.../teleop/` | Teleop **library** | Imported by scripts; not run directly |
+| `source/.../recording/` | Recording **library** | Imported by IL scripts |
+
+Mobile AI gym tasks (IL-focused):
+
+- `Isaac-Reach-MobileAI-IK-Abs-Play-v0` — keyboard/gamepad/VR teleop (16D IK-Abs actions)
+- `Isaac-Reach-MobileAI-Record-Play-v0` — LeRobot recording (14D joint obs, 3× RGB cameras @ 60 Hz)
 
 ---
 
@@ -114,7 +157,7 @@ Note: Commands below assume Isaac Sim is installed at `~/isaacsim/`. Adjust the 
 Load and visualize any robot model:
 
 ```bash
-~/isaacsim/isaac-sim.sh scripts/robot_bringup.py [robot_name]
+~/isaacsim/isaac-sim.sh scripts/demos/robot_bringup.py [robot_name]
 ```
 
 Supported robots: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `wxai_leader_right`, `stationary_ai`, `mobile_ai`
@@ -122,9 +165,9 @@ Supported robots: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `w
 ### Pick and Place Demo
 
 ```bash
-~/isaacsim/python.sh scripts/wxai_pick_place.py
-~/isaacsim/python.sh scripts/stationary_ai_pick_place.py
-~/isaacsim/python.sh scripts/mobile_ai_pick_place.py
+~/isaacsim/python.sh scripts/demos/wxai_pick_place.py
+~/isaacsim/python.sh scripts/demos/stationary_ai_pick_place.py
+~/isaacsim/python.sh scripts/demos/mobile_ai_pick_place.py
 ```
 
 ### Follow Target Demo
@@ -132,7 +175,7 @@ Supported robots: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `w
 Real-time end-effector tracking using differential IK:
 
 ```bash
-~/isaacsim/python.sh scripts/wxai_follow_target.py
+~/isaacsim/python.sh scripts/demos/wxai_follow_target.py
 ```
 
 ---
@@ -190,7 +233,7 @@ Run a trained policy:
 
 ### Imitation Learning
 
-Teleoperation for data collection:
+WXAI teleoperation for data collection:
 
 ```bash
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_se3_agent.py \
@@ -198,10 +241,61 @@ Teleoperation for data collection:
     --teleop_device keyboard
 ```
 
-**Teleop Device options:**
-- keyboard
-- spacemouse
-- gamepad
+**Teleop Device options:** keyboard, spacemouse, gamepad
+
+---
+
+## Teleoperation
+
+| Script | Robot | Task / notes |
+|--------|-------|----------------|
+| `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs teleop (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) |
+| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR) |
+| `teleop_se3_agent.py` | WXAI | Generic Se3 keyboard/gamepad teleop |
+| `teleop_leader_arm.py` | WXAI | Hardware leader arm → sim |
+
+```bash
+# Mobile AI keyboard teleop
+~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_switch.py \
+    --task Isaac-Reach-MobileAI-IK-Abs-Play-v0 --teleop_device keyboard
+
+# Mobile AI VR (requires headset + ALVR/SteamVR OpenXR runtime)
+~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
+    --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
+```
+
+---
+
+## Imitation Learning Pipeline
+
+End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT training.
+
+| Step | Script | Requires |
+|------|--------|----------|
+| Env smoke | `scripts/imitation_learning/smoke/smoke_record_env.py` | Isaac Sim |
+| Dataset smoke | `scripts/imitation_learning/smoke/smoke_record_dataset.py` | Isaac Sim |
+| Record demos | `scripts/imitation_learning/recording/record_dual_arm.py` | Isaac Sim + LeRobot venv |
+| Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
+| Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
+
+```bash
+# Record demonstrations (N=toggle episode, M=discard, R=reset)
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm.py \
+    --task Isaac-Reach-MobileAI-Record-Play-v0 \
+    --repo_id USER/dataset_name \
+    --root ~/lerobot_trossen/datasets/dataset_name \
+    --fps 60 --enable_cameras
+
+# Verify offline
+~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/validation/verify_dataset.py \
+    --root ~/lerobot_trossen/datasets/dataset_name
+
+# Short ACT training smoke (GPU via lerobot_train conda)
+python scripts/imitation_learning/training/smoke_train_act.py \
+    --root ~/lerobot_trossen/datasets/dataset_name
+```
+
+See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch workflow and folder glossary.
 
 ### Leader Arm Teleoperation
 
@@ -214,7 +308,7 @@ Control the simulated robot using a real Trossen WXAI leader arm. The `trossen_a
 **Standalone Isaac Sim:**
 
 ```bash
-~/isaacsim/python.sh scripts/wxai_leader_to_sim.py
+~/isaacsim/python.sh scripts/demos/wxai_leader_to_sim.py
 ```
 
 **Isaac Lab environment (joint-pos, IK-abs, IK-rel auto-detected from task name):**
@@ -230,17 +324,17 @@ Pass `--leader_ip` to change the default arm address (`192.168.1.2`).
 
 ## Controller API
 
-The `TrossenAIController` class provides a unified interface for controlling all Trossen AI robots.
-
-### Key Features
-
-- Differential inverse kinematics for Cartesian end-effector control
-- Gripper control with open/close commands
-- Support for all robot types (WidowX AI, Stationary AI, Mobile AI)
+The `TrossenAIController` class in `scripts/lib/controller.py` provides a unified interface for controlling all Trossen AI robots in standalone Isaac Sim demos.
 
 ### Basic Usage
 
+Add `scripts/lib` to your path (demos do this automatically), then:
+
 ```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
 from controller import RobotType, TrossenAIController
 
 # Initialize controller

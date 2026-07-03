@@ -32,13 +32,13 @@ WidowX AI Pick-and-Place Demonstration.
 This script demonstrates pick-and-place manipulation task using the WidowX AI robot.
 
 Usage:
-    ~/isaacsim/python.sh scripts/wxai_pick_place.py
+    ~/isaacsim/python.sh scripts/demos/wxai_pick_place.py
 """
 
 from __future__ import annotations
 
-import os
 import sys
+from pathlib import Path
 
 from isaacsim import SimulationApp
 
@@ -54,7 +54,7 @@ from isaacsim.core.experimental.prims import GeomPrim, RigidPrim  # noqa: E402
 from isaacsim.core.simulation_manager import SimulationManager  # noqa: E402
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
 
-sys.path.append(os.path.dirname(__file__))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from controller import RobotType, TrossenAIController  # noqa: E402
 
 # Default configuration constants
