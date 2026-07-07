@@ -376,6 +376,8 @@ def run_vr_recording_loop(
             session.episode_recording_active = False
             recorder.discard_episode()
             print("[RECORD] Recording stopped -- episode discarded before reset")
+        if session.teleoperation_active:
+            stop_teleop()
         session.request_reset()
         print("[RESET] Environment will reset on next step")
 
@@ -385,12 +387,14 @@ def run_vr_recording_loop(
 
     def stop_teleop() -> None:
         nonlocal anchor_captured
+        was_active = session.teleoperation_active
         session.stop()
         # Invalidate the snapshot so the next START re-anchors the hand to wherever
         # the EE has come to rest. Without this, resuming would jolt the EE by the
         # delta accumulated while teleop was paused.
         anchor_captured = False
-        print("[TELEOP] Deactivated (robot holds last pose; next START will re-anchor)")
+        if was_active:
+            print("[TELEOP] Deactivated (robot holds last pose; press B then U to re-engage)")
 
     def reanchor() -> None:
         nonlocal anchor_captured
@@ -409,17 +413,23 @@ def run_vr_recording_loop(
     def toggle_episode_recording() -> None:
         if recorder is None:
             return
-        if not session.teleoperation_active:
-            start_teleop()
         if not session.episode_recording_active:
+            if not session.teleoperation_active:
+                print("[RECORD] Engage teleop first (U), then press N to start recording")
+                return
             recorder.discard_episode()
             session.episode_recording_active = True
             print("[RECORD] Episode recording started -- press N again to save and reset")
             return
         session.episode_recording_active = False
         recorder.save_episode()
+        if session.teleoperation_active:
+            stop_teleop()
         session.request_reset()
-        print("[RECORD] Episode saved -- resetting robot to initial pose")
+        print(
+            "[RECORD] Episode saved -- resetting robot; reposition hands, "
+            "press B to re-anchor, then U to engage teleop"
+        )
 
     def discard_episode() -> None:
         if recorder is None:
@@ -550,8 +560,13 @@ def run_vr_recording_loop(
     )
     if args_cli.autostart:
         print("  Start:       autostart (engages as soon as hand tracking warms up)")
-    else:
+    elif recorder is None:
         print("  Start:       staged -- position hands, then press N at the workstation")
+    else:
+        print(
+            "  Start:       staged -- position hands, B to re-anchor, U to engage, "
+            "then N to record"
+        )
     if pinch_hold_dist > 0.0:
         print(
             f"  Pinch latch: orientation frozen when thumb–index < {pinch_hold_dist:.3f} m "
@@ -567,7 +582,11 @@ def run_vr_recording_loop(
     else:
         print("  Keys:        keyboard sidecar unavailable -- use --autostart to engage")
     if recorder is not None:
-        print("  Recording:   N=toggle episode  M=discard  J=reset  (U/I control teleop)")
+        print(
+            "  Recording:   U=engage  I=pause  N=record/save+reset  M=discard  "
+            "B=re-anchor  J=reset"
+        )
+        print("               save/reset stops teleop -- reposition, B, then U for next take")
         print(f"  Dataset:     {recorder.dataset_root}")
     if camera_probe is not None:
         probe_mode = "frame_capture" if camera_probe.capture_frame_during_probe else "rgb_only"
@@ -669,7 +688,7 @@ def run_vr_recording_loop(
                                 "arms now driven by VR."
                                 if session.teleoperation_active
                                 else (
-                                    "press N at the workstation to start recording."
+                                    "press U to engage teleop (B to re-anchor first if needed)."
                                     if recorder is not None
                                     else "press N at the workstation to engage."
                                 )
@@ -843,7 +862,11 @@ def run_vr_recording_loop(
                     latch_r_quat = None
                     l_was_pinching = False
                     r_was_pinching = False
-                    print("[RESET] Done -- waiting for warm-up + re-anchor to re-engage teleop")
+                    engage_key = "U" if recorder is not None else "N"
+                    print(
+                        f"[RESET] Done -- teleop off; reposition hands, press B to re-anchor, "
+                        f"then {engage_key} to engage"
+                    )
 
         except Exception as e:
             logger.error(f"Simulation step error: {e}")
