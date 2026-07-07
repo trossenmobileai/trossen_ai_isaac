@@ -47,6 +47,7 @@ from isaaclab.utils.math import (
     quat_apply,
     quat_conjugate,
     quat_mul,
+    yaw_quat,
 )
 from isaaclab_tasks.utils import parse_env_cfg
 
