@@ -33,6 +33,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import gymnasium as gym
 import isaaclab.sim as sim_utils
@@ -49,8 +50,11 @@ from isaaclab.utils.math import (
     quat_mul,
     yaw_quat,
 )
-from isaaclab_tasks.utils import parse_env_cfg
 
+from trossen_ai_isaac.recording.camera_compat import CameraCompatProbe
+from trossen_ai_isaac.recording.schema import CAMERA_KEYS
+from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
+from trossen_ai_isaac.teleop.session import TeleopSession, shutdown_requested
 from trossen_ai_isaac.teleop.vr.constants import (
     ACTION_DIM_ENV,
     LEFT_EE_BODY_NAME,
@@ -67,20 +71,37 @@ from trossen_ai_isaac.teleop.vr.hand_tracking import (
     _get_pinch_distances,
 )
 
+if TYPE_CHECKING:
+    from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
+
 logger = logging.getLogger(__name__)
 
 
-def run_vr_teleop_loop(simulation_app, args_cli) -> None:
-    """Run dual-arm VR teleoperation until the simulation app stops."""
-    # -- Environment setup --
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
-    env_cfg.env_name = args_cli.task
-    env_cfg.terminations.time_out = None
+def _should_keep_cameras(args_cli) -> bool:
+    """Return whether the VR run should preserve task-declared camera sensors."""
+    return bool(
+        getattr(args_cli, "keep_cameras", False)
+        or getattr(args_cli, "camera_probe_interval", 0) > 0
+        or getattr(args_cli, "enable_cameras", False)
+    )
 
-    # XR cannot share the render pipeline with USD cameras — strip any camera configs
-    # the env may have declared, and switch to DLSS for VR-friendly anti-aliasing.
-    env_cfg = remove_camera_configs(env_cfg)
-    env_cfg.sim.render.antialiasing_mode = "DLSS"
+
+def build_vr_env_cfg(args_cli):
+    """Build the VR env config and optionally preserve dataset cameras."""
+    env_cfg = make_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
+    keep_cameras = _should_keep_cameras(args_cli)
+    if keep_cameras:
+        scene_cfg = getattr(env_cfg, "scene", None)
+        available = [name for name in CAMERA_KEYS if scene_cfg is not None and hasattr(scene_cfg, name)]
+        if available:
+            print(f"[VR CAMERA MODE] Keeping cameras enabled: {available}")
+        else:
+            print("[VR CAMERA MODE] Requested camera retention, but no record cameras were declared by the task")
+    else:
+        # XR commonly conflicts with USD sensor render products; keep the original
+        # camera-stripping behavior unless the operator explicitly requests otherwise.
+        env_cfg = remove_camera_configs(env_cfg)
+        print("[VR CAMERA MODE] Stripping task-declared cameras for XR teleop")
 
     # Resolve the effective XR anchor: start from the --view preset, then let any
     # explicit --anchor_* flag override the corresponding field. Precedence:
@@ -106,15 +127,11 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     env_cfg.xr.anchor_pos = anchor_pos
     env_cfg.xr.anchor_rot = anchor_rot
 
-    # Validate that the selected task actually exposes a handtracking device. Failing
-    # loud here is much friendlier than a cryptic AttributeError 200 lines later.
     if not hasattr(env_cfg, "teleop_devices") or args_cli.device_name not in env_cfg.teleop_devices.devices:
-        logger.error(
+        raise ValueError(
             f"Task '{args_cli.task}' does not declare a teleop device named '{args_cli.device_name}'. "
             "Use one of the Isaac-Reach-MobileAI-IK-Abs-* tasks, which register the 'handtracking' device."
         )
-        simulation_app.close()
-        return
 
     # Push the resolved anchor onto the OpenXR device cfg -- this is the copy the
     # device actually consumes when building the headset anchor. Without this, the
@@ -132,12 +149,39 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
             "overrides cannot be applied and the viewpoint will use the config default."
         )
 
+    env_cfg.sim.render.antialiasing_mode = "DLSS"
+    return env_cfg
+
+
+def run_vr_teleop_loop(simulation_app, args_cli) -> None:
+    """Run dual-arm VR teleoperation until the simulation app stops."""
+    try:
+        env_cfg = build_vr_env_cfg(args_cli)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        simulation_app.close()
+        return
+
     try:
         env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
     except Exception as e:
         logger.error(f"Failed to create environment: {e}")
         simulation_app.close()
         return
+    try:
+        run_vr_recording_loop(simulation_app, env, env_cfg, args_cli, recorder=None)
+    finally:
+        env.close()
+
+
+def run_vr_recording_loop(
+    simulation_app,
+    env,
+    env_cfg,
+    args_cli,
+    recorder: LeRobotRecorder | None = None,
+) -> None:
+    """Run the VR teleop core loop with optional camera probing and recording."""
 
     # Sanity-check the env's action width. If a relative-IK task slipped through,
     # advance() will still produce 16D output but env.step() expects 12D and will throw.
@@ -182,13 +226,12 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
         return
 
     # -- State flags --
-    should_reset = False
     # Staged start: by default we begin INACTIVE so the operator can get their
     # hands into a comfortable neutral pose first; a workstation key (N) then
     # engages teleop and the anchor is captured at that pose, so the arms never
     # jump on connect. --autostart restores the old behavior (engage as soon as
     # hand tracking warms up). Either way the warm-up guard still gates stepping.
-    teleoperation_active = bool(args_cli.autostart)
+    session = TeleopSession(teleoperation_active=bool(args_cli.autostart))
     # Warm-up state: only forward actions to env.step() after both hands have
     # reported non-zero positions for `warmup_frames_required` consecutive
     # frames. This prevents the arms from snapping toward (0,0,0) while the
@@ -241,6 +284,14 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     # Used (instead of head_yaw_inv alone) for the orientation coupling so that
     # rotation and translation are always conjugated by the same frame.
     control_frame: torch.Tensor | None = None
+    camera_probe = None
+    camera_probe_interval = max(0, int(getattr(args_cli, "camera_probe_interval", 0)))
+    if camera_probe_interval > 0:
+        camera_probe = CameraCompatProbe(
+            task=getattr(args_cli, "task_description", args_cli.task),
+            output_path=getattr(args_cli, "camera_probe_output", None),
+            capture_frame_during_probe=bool(getattr(args_cli, "camera_probe_capture_frame", False)),
+        )
 
     def _capture_anchor(action_14d: torch.Tensor) -> None:
         """Snapshot hand poses, EE poses, and head yaw to define delta anchors.
@@ -321,18 +372,20 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
         )
 
     def reset_env() -> None:
-        nonlocal should_reset
-        should_reset = True
+        if recorder is not None and session.episode_recording_active:
+            session.episode_recording_active = False
+            recorder.discard_episode()
+            print("[RECORD] Recording stopped -- episode discarded before reset")
+        session.request_reset()
         print("[RESET] Environment will reset on next step")
 
     def start_teleop() -> None:
-        nonlocal teleoperation_active
-        teleoperation_active = True
+        session.start()
         print("[TELEOP] Activated (left+right hands -> left+right arms)")
 
     def stop_teleop() -> None:
-        nonlocal teleoperation_active, anchor_captured
-        teleoperation_active = False
+        nonlocal anchor_captured
+        session.stop()
         # Invalidate the snapshot so the next START re-anchors the hand to wherever
         # the EE has come to rest. Without this, resuming would jolt the EE by the
         # delta accumulated while teleop was paused.
@@ -353,6 +406,28 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
         "RESET": reset_env,
     }
 
+    def toggle_episode_recording() -> None:
+        if recorder is None:
+            return
+        if not session.teleoperation_active:
+            start_teleop()
+        if not session.episode_recording_active:
+            recorder.discard_episode()
+            session.episode_recording_active = True
+            print("[RECORD] Episode recording started -- press N again to save and reset")
+            return
+        session.episode_recording_active = False
+        recorder.save_episode()
+        session.request_reset()
+        print("[RECORD] Episode saved -- resetting robot to initial pose")
+
+    def discard_episode() -> None:
+        if recorder is None:
+            return
+        session.episode_recording_active = False
+        recorder.discard_episode()
+        print("[RECORD] Episode buffer discarded -- recording stopped")
+
     # -- Build OpenXR device via the env-config-driven factory --
     try:
         teleop_interface = create_teleop_device(
@@ -372,8 +447,9 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     # from CloudXR carb events, which ALVR+SteamVR doesn't publish, so we add a
     # plain Se3Keyboard purely for its key callbacks (its SE3 motion output is
     # ignored). Its advance() is pumped each loop so events are processed.
-    #   N -> start/engage teleop      M -> pause (hold pose, re-anchor on resume)
-    #   B -> re-anchor (no pause)     J -> reset environment
+    #   teleop-only mode:   N -> start   M -> pause   B -> re-anchor   J -> reset
+    #   recording mode:     U -> start   I -> pause   N -> start/save episode
+    #                       M -> discard  B -> re-anchor   J -> reset
     #
     # Key choice matters: SPACE is Kit's timeline play/pause (pressing it both
     # engaged teleop AND paused the sim), and P/R/ENTER are bound to other Kit
@@ -382,8 +458,14 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     keyboard_interface = None
     try:
         keyboard_interface = Se3Keyboard(Se3KeyboardCfg())
-        keyboard_interface.add_callback("N", start_teleop)
-        keyboard_interface.add_callback("M", stop_teleop)
+        if recorder is None:
+            keyboard_interface.add_callback("N", start_teleop)
+            keyboard_interface.add_callback("M", stop_teleop)
+        else:
+            keyboard_interface.add_callback("U", start_teleop)
+            keyboard_interface.add_callback("I", stop_teleop)
+            keyboard_interface.add_callback("N", toggle_episode_recording)
+            keyboard_interface.add_callback("M", discard_episode)
         keyboard_interface.add_callback("B", reanchor)
         keyboard_interface.add_callback("J", reset_env)
     except Exception as exc:
@@ -478,10 +560,18 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     else:
         print("  Pinch latch: disabled (--pinch_hold_dist 0)")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
-    if keyboard_interface is not None:
+    if keyboard_interface is not None and recorder is None:
         print("  Keys:        N=start  M=pause  B=re-anchor  J=reset  (workstation keyboard)")
+    elif keyboard_interface is not None:
+        print("  Keys:        U=start  I=pause  N=record/save  M=discard  B=re-anchor  J=reset")
     else:
         print("  Keys:        keyboard sidecar unavailable -- use --autostart to engage")
+    if recorder is not None:
+        print("  Recording:   N=toggle episode  M=discard  J=reset  (U/I control teleop)")
+        print(f"  Dataset:     {recorder.dataset_root}")
+    if camera_probe is not None:
+        probe_mode = "frame_capture" if camera_probe.capture_frame_during_probe else "rgb_only"
+        print(f"  Camera probe:{camera_probe_interval} step(s)  mode={probe_mode}")
     print("=" * 60)
 
     def _draw_debug_markers(target_pose: torch.Tensor | None) -> None:
@@ -535,7 +625,7 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
     step_count = 0
 
     # -- Main loop --
-    while simulation_app.is_running():
+    while simulation_app.is_running() and not shutdown_requested():
         try:
             with torch.inference_mode():
                 # Pump the workstation keyboard so its key callbacks (N/M/B/J)
@@ -577,8 +667,12 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                             warmup_complete = True
                             ready_msg = (
                                 "arms now driven by VR."
-                                if teleoperation_active
-                                else "press N at the workstation to engage."
+                                if session.teleoperation_active
+                                else (
+                                    "press N at the workstation to start recording."
+                                    if recorder is not None
+                                    else "press N at the workstation to engage."
+                                )
                             )
                             print(
                                 f"[WARMUP] Hand tracking stable after "
@@ -587,7 +681,7 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                     else:
                         warmup_valid_count = 0
 
-                step_actions = teleoperation_active and warmup_complete
+                step_actions = session.teleoperation_active and warmup_complete
                 target_pose = None  # 14D pose target, kept for marker drawing
                 if step_actions:
                     if anchor_mode == "hand_anchored":
@@ -697,10 +791,15 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                     target_action = torch.cat([target_pose, grip_part])
                     actions = target_action.unsqueeze(0).repeat(env.num_envs, 1)
                     env.step(actions)
+                    if recorder is not None and session.episode_recording_active:
+                        recorder.on_step(env)
                 else:
                     # Render only — robot holds its last IK target. Without this,
                     # the viewer freezes while we're waiting on warm-up or paused.
                     env.sim.render()
+
+                if camera_probe is not None and step_count % camera_probe_interval == 0:
+                    camera_probe.probe(env, step_count)
 
                 # Debug markers: EE goal frames (converted base->world) and the
                 # tracked hand keypoints. Guarded so a viz error never kills teleop.
@@ -712,7 +811,7 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                     r_pos = pose_part[7:10].tolist()
                     if not warmup_complete:
                         state = f"WARMUP {warmup_valid_count}/{warmup_frames_required}"
-                    elif not teleoperation_active:
+                    elif not session.teleoperation_active:
                         state = "ARMED/WAITING" if not args_cli.autostart else "PAUSED"
                     elif anchor_mode == "hand_anchored" and not anchor_captured:
                         state = "ANCHORING"
@@ -723,10 +822,11 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                         f"L_pos={[f'{v:+.3f}' for v in l_pos]} "
                         f"R_pos={[f'{v:+.3f}' for v in r_pos]} "
                         f"L_grip={left_grip:+.2f} R_grip={right_grip:+.2f}"
+                        f"{' REC' if session.episode_recording_active else ''}"
                     )
                 step_count += 1
 
-                if should_reset:
+                if session.consume_reset():
                     env.reset()
                     teleop_interface.reset()
                     # Re-warm-up after a reset: device pose cache was just cleared
@@ -743,12 +843,14 @@ def run_vr_teleop_loop(simulation_app, args_cli) -> None:
                     latch_r_quat = None
                     l_was_pinching = False
                     r_was_pinching = False
-                    should_reset = False
                     print("[RESET] Done -- waiting for warm-up + re-anchor to re-engage teleop")
 
         except Exception as e:
             logger.error(f"Simulation step error: {e}")
             break
 
-    env.close()
+    if shutdown_requested():
+        print("[EXIT] Shutdown requested -- leaving VR teleop loop.")
+    if camera_probe is not None:
+        camera_probe.finalize()
     print("Environment closed.")
