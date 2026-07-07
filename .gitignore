@@ -71,3 +71,7 @@ tests/
 .isaac-lab-docker-history
 
 .pre-commit-config.yaml
+
+
+# Obsidian Vault Settings
+/docs/.obsidian/*

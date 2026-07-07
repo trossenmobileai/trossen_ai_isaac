@@ -39,6 +39,7 @@ This repository contains NVIDIA Isaac Sim and Isaac Lab integration for Trossen 
 - [Imitation Learning Pipeline](#imitation-learning-pipeline)
 - [Controller API](#controller-api)
 - [IL Pipeline Branches](docs/IL_PIPELINE_BRANCHES.md)
+- [Mobile AI Epic Docs](docs/README.md) — Epic 3 (simulation training) and Epic 4 (VR integration)
 - [Related Links](#related-links)
 
 ---

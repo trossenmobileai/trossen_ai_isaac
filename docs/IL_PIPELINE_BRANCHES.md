@@ -2,6 +2,8 @@
 
 Integration branch: **`feat/il-pipeline-integration`** (Phases 1–2 recording + Phase 4 scene).
 
+**Epic documentation:** [Mobile AI docs index](README.md) · [Epic 3 — Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md) · [Epic 4 — VR Integration](EPIC4_VR_INTEGRATION.md)
+
 ## Repository layout (scripts vs package)
 
 | Path | Role |
