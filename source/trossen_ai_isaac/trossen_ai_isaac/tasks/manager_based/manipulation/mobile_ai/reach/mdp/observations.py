@@ -69,3 +69,10 @@ def record_joint_pos_14(env: ManagerBasedEnv) -> torch.Tensor:
     robot: Articulation = env.scene["robot"]
     joint_ids = _record_joint_ids(robot)
     return robot.data.joint_pos[:, joint_ids]
+
+
+def record_joint_target_14(env: ManagerBasedEnv) -> torch.Tensor:
+    """Return 14D commanded joint targets in LeRobot dataset order."""
+    robot: Articulation = env.scene["robot"]
+    joint_ids = _record_joint_ids(robot)
+    return robot.data.joint_pos_target[:, joint_ids]

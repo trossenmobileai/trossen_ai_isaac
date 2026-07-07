@@ -132,6 +132,14 @@ def make_env_cfg(task: str, device: str, num_envs: int, fps: int | None = None):
     """Parse env cfg, disable timeout, and optionally set decimation from fps."""
     env_cfg = parse_env_cfg(task, device=device, num_envs=num_envs)
     env_cfg.env_name = task
+    # Recording tasks must keep the three camera sensors enabled.
+    if "Record" in task:
+        expected_cams = ("cam_high", "cam_left_wrist", "cam_right_wrist")
+        scene_cfg = getattr(env_cfg, "scene", None)
+        if scene_cfg is not None:
+            missing = [name for name in expected_cams if not hasattr(scene_cfg, name)]
+            if missing:
+                logger.warning("Env cfg is missing expected camera configs: %s", missing)
     env_cfg.terminations.time_out = None
 
     if fps is not None:

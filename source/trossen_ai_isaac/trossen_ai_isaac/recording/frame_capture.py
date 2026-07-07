@@ -35,6 +35,7 @@ import numpy as np
 from trossen_ai_isaac.recording.schema import CAMERA_KEYS
 from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import (
     record_joint_pos_14,
+    record_joint_target_14,
 )
 
 
@@ -44,22 +45,31 @@ def capture_state(env) -> np.ndarray:
     return joints
 
 
+def capture_action(env) -> np.ndarray:
+    """Return 14D commanded joint targets as a float32 numpy vector."""
+    joints = record_joint_target_14(env)[0].detach().cpu().numpy().astype(np.float32)
+    return joints
+
+
 def capture_images(env) -> dict[str, np.ndarray]:
     """Return uint8 HWC RGB images keyed by camera scene name."""
     images: dict[str, np.ndarray] = {}
     for cam_key in CAMERA_KEYS:
         rgb = env.scene[cam_key].data.output["rgb"][0].detach().cpu().numpy()
+        if rgb.shape[-1] == 4:
+            rgb = rgb[..., :3]
         images[cam_key] = np.asarray(rgb, dtype=np.uint8).copy()
     return images
 
 
 def capture_frame(env, task: str) -> dict:
-    """Bundle state, action (14D joints), images, and task string for LeRobot."""
+    """Bundle state, commanded action, images, and task string for LeRobot."""
     state = capture_state(env)
+    action = capture_action(env)
     images = capture_images(env)
     frame = {
         "observation.state": state,
-        "action": state.copy(),
+        "action": action,
         "task": task,
     }
     for cam_key, image in images.items():
