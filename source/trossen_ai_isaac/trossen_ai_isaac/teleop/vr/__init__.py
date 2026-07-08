@@ -28,6 +28,6 @@
 
 """VR teleoperation package for Mobile AI."""
 
-from trossen_ai_isaac.teleop.vr.loop import run_vr_teleop_loop
+from trossen_ai_isaac.teleop.vr.loop import build_vr_env_cfg, run_vr_recording_loop, run_vr_teleop_loop
 
-__all__ = ["run_vr_teleop_loop"]
+__all__ = ["build_vr_env_cfg", "run_vr_recording_loop", "run_vr_teleop_loop"]

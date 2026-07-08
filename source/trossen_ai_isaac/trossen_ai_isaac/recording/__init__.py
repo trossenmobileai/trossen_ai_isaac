@@ -28,11 +28,13 @@
 
 """LeRobot dataset recording helpers for Mobile AI sim demonstrations."""
 
+from trossen_ai_isaac.recording.camera_compat import CameraCompatProbe
 from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
 from trossen_ai_isaac.recording.runtime import install_recording_signal_handlers, run_recording_session
 from trossen_ai_isaac.recording.smoke import run_zero_action_dataset_smoke, run_zero_action_env_smoke
 
 __all__ = [
+    "CameraCompatProbe",
     "LeRobotRecorder",
     "install_recording_signal_handlers",
     "run_recording_session",

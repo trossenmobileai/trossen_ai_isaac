@@ -39,13 +39,14 @@ VR also supports **safe practice**: operators manipulate the robot in simulation
 
 ### Wider project context
 
-The long-term objective is VR-collected demonstrations feeding the same LeRobot pipeline described in [Epic 3 §4.6](EPIC3_SIMULATION_TRAINING_PIPELINE.md#46-imitation-learning-recording-pipeline). VR teleoperation is implemented; wiring the LeRobot recorder into the VR loop remains planned work.
+The long-term objective is VR-collected demonstrations feeding the same LeRobot pipeline described in [Epic 3 §4.6](EPIC3_SIMULATION_TRAINING_PIPELINE.md#46-imitation-learning-recording-pipeline). The repository now includes a dedicated VR recording entrypoint plus camera-compatibility probes so Quest teleoperation can be exercised against the record task directly.
 
 ### Current scope
 
 - [VR stack configured](#42-one-time-vr-workstation-configuration): ALVR, SteamVR, OpenXR on the workstation
 - [Mobile AI dual-arm VR teleoperation](#43-vr-teleoperation-module) via `teleop_dual_arm_vr.py`
-- **VR + LeRobot recording not yet integrated**; dataset collection today uses keyboard/gamepad recording per [Epic 3 §5.6](EPIC3_SIMULATION_TRAINING_PIPELINE.md#56-recording--human-demonstrations)
+- [VR recording entrypoint](#54-vr-recording-procedure) via `record_dual_arm_vr.py`
+- [XR camera compatibility probes](#54-vr-recording-procedure) for testing whether `cam_high`, `cam_left_wrist`, and `cam_right_wrist` can stay active during VR
 
 ### Prerequisites (Epic 3)
 
@@ -153,7 +154,7 @@ VR implementation extends the Epic 3 task and teleoperation framework. The proje
 | 1 | ALVR, SteamVR, OpenXR workstation setup | [§4.2](#42-one-time-vr-workstation-configuration) |
 | 2 | Mobile AI dual-arm hand tracking (VR stack validated here) | [§4.3](#43-vr-teleoperation-module), [§5.2](#52-mobile-ai-vr-teleoperation) |
 | 3 | VR library under `teleop/vr/` | [§4.6](#46-repository-and-module-structure) |
-| 4 | VR + LeRobot recording | [§5.5](#55-vr-recording-procedure-planned) (planned) |
+| 4 | VR + LeRobot recording | [§5.4](#54-vr-recording-procedure) |
 
 ### 4.1 Integration with the Simulation Pipeline
 
@@ -214,7 +215,7 @@ cat ~/.config/openxr/1/active_runtime.json
 
 ### 4.3 VR Teleoperation Module
 
-VR teleoperation logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The entrypoint is `scripts/teleoperation/teleop_dual_arm_vr.py`, which calls `run_vr_teleop_loop` in `loop.py`.
+VR teleoperation logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The standard entrypoint is `scripts/teleoperation/teleop_dual_arm_vr.py`, which calls `run_vr_teleop_loop` in `loop.py`. VR dataset collection uses `scripts/imitation_learning/recording/record_dual_arm_vr.py`, which shares the same control loop but wraps it with `LeRobotRecorder` and recording-session lifecycle management.
 
 #### VR module package
 
@@ -283,8 +284,11 @@ VR was built in two stages on the Mobile AI robot directly. The team did **not**
 | Location | Role | How to run |
 |----------|------|------------|
 | `scripts/teleoperation/teleop_dual_arm_vr.py` | VR teleoperation entrypoint | `~/IsaacLab/isaaclab.sh -p scripts/teleoperation/...` |
+| `scripts/imitation_learning/recording/record_dual_arm_vr.py` | VR + LeRobot recording entrypoint | `~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/...` |
 | `source/.../teleop/vr/loop.py` | Main VR control loop | Imported by entrypoint |
+| `source/.../teleop/vr/cli.py` | Shared VR argparse flags | Loaded pre-AppLauncher |
 | `source/.../teleop/vr/hand_tracking.py` | Hand pose and pinch extraction | Imported by loop |
+| `source/.../recording/camera_compat.py` | XR camera probe / JSON report helper | Imported by loop |
 | `source/.../teleop/vr/anchor.py` | Hand-anchored vs absolute composition | Imported by loop |
 | `source/.../teleop/vr/constants.py` | 16D layout and view presets | Imported by loop |
 | `source/.../tasks/.../mobile_ai/reach/ik_abs_env_cfg.py` | OpenXR device and retargeter registration | Registered as gym task ([Epic 3 §4.3](EPIC3_SIMULATION_TRAINING_PIPELINE.md#ik_abs_env_cfgpy--absolute-ik-teleoperation)) |
@@ -333,13 +337,40 @@ cd ~/trossen_ai_isaac
 
 Fine-tune with `--anchor_pos`, `--anchor_rot`, or `--anchor_prim_path` overrides.
 
-### 5.4 VR Recording Procedure (Planned)
+### 5.4 VR Recording Procedure
 
 **Purpose:** Collect LeRobot datasets via VR teleoperation.
 
-This procedure is **not yet implemented**. It will use `Isaac-Reach-MobileAI-Record-Play-v0` with the LeRobot recorder wired into the VR loop (planned branch: `feat/il-record-vr`).
+Use the dedicated VR recording entrypoint:
 
-Until then, dataset collection uses keyboard/gamepad recording per [Epic 3 §5.6](EPIC3_SIMULATION_TRAINING_PIPELINE.md#56-recording--human-demonstrations).
+```bash
+cd ~/trossen_ai_isaac
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+  --repo_id YourUser/mobile_ai_vr_reach \
+  --root /tmp/mobile_ai_vr_reach
+```
+
+The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps the three record cameras enabled, and uses workstation-side controls:
+
+- `N`: start recording the current episode, then save-and-reset on the next press
+- `M`: discard the current episode buffer
+- `U`: start teleop without recording
+- `I`: pause teleop
+- `B`: re-anchor the current VR control frame
+- `J`: reset the environment and discard any in-progress episode
+
+For the staged XR camera-compatibility experiment, run the teleop script with camera retention and probing enabled:
+
+```bash
+~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
+  --task Isaac-Reach-MobileAI-Record-Play-v0 \
+  --keep_cameras \
+  --camera_probe_interval 60 \
+  --camera_probe_capture_frame \
+  --camera_probe_output /tmp/vr_camera_probe.json
+```
+
+This prints periodic probe status and writes a JSON report summarizing whether `cam_high`, `cam_left_wrist`, and `cam_right_wrist` remained readable during the XR session.
 
 ---
 
@@ -351,9 +382,9 @@ Until then, dataset collection uses keyboard/gamepad recording per [Epic 3 §5.6
 |--|-------------------|-----|
 | Script | `teleop_dual_arm_switch.py` | `teleop_dual_arm_vr.py` |
 | Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously |
-| Recording today | Yes (`Record-Play` task) | Not yet |
+| Recording today | Yes (`Record-Play` task) | Yes (`record_dual_arm_vr.py`) |
 | Setup complexity | Low | Headset + ALVR + SteamVR |
-| Best suited for | Dataset collection (current) | Natural dual-arm demos (planned) |
+| Best suited for | Dataset collection (current) | Natural dual-arm demos and VR dataset collection |
 
 ### 6.2 Arm Drift (Not Applicable)
 
@@ -361,7 +392,7 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 
 ### 6.3 Current Limitations
 
-- **VR + LeRobot recording not integrated:** keyboard/gamepad recording is the current data collection path
+- **Hardware validation is still required:** the new XR camera-retention and recording path needs headset-on-workstation confirmation
 - **Setup complexity:** VR requires ALVR, SteamVR, Quest 3, and per-session startup steps
 - **Network dependency:** ALVR requires stable 5 GHz Wi-Fi; institutional networks may block peer-to-peer traffic
 
@@ -396,10 +427,11 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 - [x] [ALVR + SteamVR + OpenXR stack](#42-one-time-vr-workstation-configuration) configured
 - [x] [Mobile AI dual-arm VR teleoperation](#43-vr-teleoperation-module) (`teleop_dual_arm_vr.py`); VR stack validated directly on Mobile AI
 - [x] Hand-anchored IK mode with view presets
+- [x] Dedicated VR recording entrypoint (`record_dual_arm_vr.py`)
+- [x] Optional XR camera-retention / compatibility probing flags (`--keep_cameras`, `--camera_probe_interval`, `--camera_probe_capture_frame`)
 
 ### Planned or in progress
 
-- [ ] **`feat/il-record-vr`**: integrate LeRobot recorder into VR teleoperation loop (completes Epic 3 and Epic 4 together)
 - [ ] Large-scale synthetic demonstration collection via VR
 
 ### Related documentation
