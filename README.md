@@ -96,7 +96,7 @@ Runnable scripts live under `scripts/`; reusable logic lives in the installed `t
 scripts/
 ├── teleoperation/              # Human-in-the-loop control (isaaclab.sh -p)
 ├── imitation_learning/         # Recording, dataset QA, training smoke
-│   ├── recording/record_dual_arm.py
+│   ├── recording/record_dual_arm.py, record_dual_arm_vr.py
 │   ├── smoke/smoke_record_env.py, smoke_record_dataset.py
 │   ├── validation/verify_dataset.py
 │   └── training/smoke_train_act.py
@@ -252,6 +252,8 @@ WXAI teleoperation for data collection:
 |--------|-------|----------------|
 | `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs teleop (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) |
 | `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR) |
+| `record_dual_arm.py` | Mobile AI | Keyboard/gamepad LeRobot recording |
+| `record_dual_arm_vr.py` | Mobile AI | VR LeRobot recording |
 | `teleop_se3_agent.py` | WXAI | Generic Se3 keyboard/gamepad teleop |
 | `teleop_leader_arm.py` | WXAI | Hardware leader arm → sim |
 
@@ -275,17 +277,24 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 |------|--------|----------|
 | Env smoke | `scripts/imitation_learning/smoke/smoke_record_env.py` | Isaac Sim |
 | Dataset smoke | `scripts/imitation_learning/smoke/smoke_record_dataset.py` | Isaac Sim |
-| Record demos | `scripts/imitation_learning/recording/record_dual_arm.py` | Isaac Sim + LeRobot venv |
+| Record demos (keyboard/gamepad) | `scripts/imitation_learning/recording/record_dual_arm.py` | Isaac Sim + LeRobot |
+| Record demos (VR) | `scripts/imitation_learning/recording/record_dual_arm_vr.py` | Isaac Sim + LeRobot + VR stack |
 | Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
 | Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
 
 ```bash
-# Record demonstrations (N=toggle episode, M=discard, R=reset)
+# Record demonstrations — keyboard/gamepad (N=toggle episode, M=discard, R=reset)
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm.py \
     --task Isaac-Reach-MobileAI-Record-Play-v0 \
     --repo_id USER/dataset_name \
     --root ~/lerobot_trossen/datasets/dataset_name \
     --fps 60 --enable_cameras
+
+# Record demonstrations — VR (U=start teleop, N=toggle episode, M=discard, J=reset)
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+    --repo_id USER/dataset_name \
+    --root ~/lerobot_trossen/datasets/dataset_name \
+    --fps 60
 
 # Verify offline
 ~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/validation/verify_dataset.py \
@@ -296,7 +305,7 @@ python scripts/imitation_learning/training/smoke_train_act.py \
     --root ~/lerobot_trossen/datasets/dataset_name
 ```
 
-See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch workflow and folder glossary.
+See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup.
 
 ### Leader Arm Teleoperation
 

@@ -138,7 +138,7 @@ flowchart TD
   S1["1. One-time VR workstation setup"]
   S2["2. Mobile AI dual-arm VR teleoperation"]
   S3["3. Modular VR library refactor"]
-  S4["4. VR + LeRobot recording (planned)"]
+  S4["4. VR + LeRobot recording"]
 
   S1 --> S2 --> S3 --> S4
 ```
@@ -274,10 +274,11 @@ Default `XrCfg` anchors the operator at the robot head camera (`cam_high_link`) 
 
 ### 4.5 Development History
 
-VR was built in two stages on the Mobile AI robot directly. The team did **not** run a separate Franka OpenXR smoke test; the ALVR → SteamVR → OpenXR → Isaac Lab chain was validated on `Isaac-Reach-MobileAI-IK-Abs-Play-v0` from the start.
+VR was built in three stages on the Mobile AI robot directly. The team did **not** run a separate Franka OpenXR smoke test; the ALVR → SteamVR → OpenXR → Isaac Lab chain was validated on `Isaac-Reach-MobileAI-IK-Abs-Play-v0` from the start.
 
 1. **Mobile AI dual-arm VR** ([§4.3](#43-vr-teleoperation-module)): hand tracking ported to the Mobile AI Reach task on branch `feat/vr-handtracking-teleop`. This step confirmed the full VR stack and dual-arm IK-Abs mapping together.
 2. **Modular refactor**: VR logic moved into `source/.../teleop/vr/` on the integration branch, alongside keyboard teleoperation in `teleop/se3_switch.py`.
+3. **VR + LeRobot recording** ([§5.4](#54-vr-recording-procedure)): `record_dual_arm_vr.py` and `run_vr_recording_loop` wrap the VR control loop with `LeRobotRecorder`, camera retention (`--keep_cameras`), and XR camera compatibility probes. Merged to `main` via PR #2 (`feat/vr-recording-integration`).
 
 ### 4.6 Repository and Module Structure
 
@@ -380,11 +381,11 @@ This prints periodic probe status and writes a JSON report summarizing whether `
 
 | | Keyboard / gamepad | VR |
 |--|-------------------|-----|
-| Script | `teleop_dual_arm_switch.py` | `teleop_dual_arm_vr.py` |
+| Script | `teleop_dual_arm_switch.py` / `record_dual_arm.py` | `teleop_dual_arm_vr.py` / `record_dual_arm_vr.py` |
 | Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously |
-| Recording today | Yes (`Record-Play` task) | Yes (`record_dual_arm_vr.py`) |
+| Recording | Yes (`record_dual_arm.py`) | Yes (`record_dual_arm_vr.py`) |
 | Setup complexity | Low | Headset + ALVR + SteamVR |
-| Best suited for | Dataset collection (current) | Natural dual-arm demos and VR dataset collection |
+| Best suited for | Bulk dataset collection, fast iteration | Natural dual-arm demos, bimanual coordination |
 
 ### 6.2 Arm Drift (Not Applicable)
 
@@ -392,9 +393,10 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 
 ### 6.3 Current Limitations
 
-- **Hardware validation is still required:** the new XR camera-retention and recording path needs headset-on-workstation confirmation
+- **Hardware validation is still required:** the XR camera-retention and recording path needs headset-on-workstation confirmation that `cam_high`, `cam_left_wrist`, and `cam_right_wrist` produce non-blank videos during VR sessions
 - **Setup complexity:** VR requires ALVR, SteamVR, Quest 3, and per-session startup steps
 - **Network dependency:** ALVR requires stable 5 GHz Wi-Fi; institutional networks may block peer-to-peer traffic
+- **No sim policy evaluation:** trained ACT policies cannot yet be rolled out in simulation from this repository
 
 ### 6.4 Design Notes
 
@@ -427,12 +429,15 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 - [x] [ALVR + SteamVR + OpenXR stack](#42-one-time-vr-workstation-configuration) configured
 - [x] [Mobile AI dual-arm VR teleoperation](#43-vr-teleoperation-module) (`teleop_dual_arm_vr.py`); VR stack validated directly on Mobile AI
 - [x] Hand-anchored IK mode with view presets
-- [x] Dedicated VR recording entrypoint (`record_dual_arm_vr.py`)
+- [x] Dedicated VR recording entrypoint (`record_dual_arm_vr.py`) with `run_vr_recording_loop`
 - [x] Optional XR camera-retention / compatibility probing flags (`--keep_cameras`, `--camera_probe_interval`, `--camera_probe_capture_frame`)
+- [x] VR recording merged to `main` (PR #2)
 
 ### Planned or in progress
 
+- [ ] Headset-on-workstation validation of VR dataset quality (camera readability, episode workflow)
 - [ ] Large-scale synthetic demonstration collection via VR
+- [ ] Sim policy evaluation with VR-collected datasets
 
 ### Related documentation
 

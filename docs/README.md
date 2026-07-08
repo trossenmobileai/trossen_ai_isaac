@@ -4,8 +4,8 @@ Documentation for the **Trossen Mobile AI** imitation-learning project, covering
 
 | Epic | Document | What it covers |
 |------|----------|----------------|
-| **Epic 3** | [Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md) | Isaac Lab tasks, dual-arm teleoperation, LeRobot data collection, training smoke |
-| **Epic 4** | [VR Integration](EPIC4_VR_INTEGRATION.md) | Quest 3 + ALVR + OpenXR teleoperation on the same task framework |
+| **Epic 3** | [Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md) | Isaac Lab tasks, dual-arm teleoperation, LeRobot data collection (keyboard/gamepad and VR), training smoke |
+| **Epic 4** | [VR Integration](EPIC4_VR_INTEGRATION.md) | Quest 3 + ALVR + OpenXR teleoperation and VR dataset recording on the same task framework |
 
 ## Who this is for
 
@@ -26,7 +26,7 @@ Both epic reports follow the same technical-report structure (Goal, Overview, Ba
 | [IL Pipeline Branches](IL_PIPELINE_BRANCHES.md) | Branch status, folder glossary, recording quick reference |
 | [Repository README](../README.md) | Install, scripts, API reference |
 
-**Branch:** `feat/il-pipeline-integration` (current integration target until merged to `main`)
+**Branch:** `main` (IL pipeline and VR recording merged via PR #3 and PR #2)
 
 Upstream baseline: [Trossen AI Isaac tutorial](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html)
 
@@ -61,7 +61,16 @@ Use this on a configured workstation to confirm the pipeline is working (from th
   ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_switch.py \
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0 --teleop_device keyboard
   ```
-- [ ] (Optional, after reading Epic 4) VR teleoperation session smoke
+- [ ] (Optional, after reading Epic 4) VR teleoperation session smoke:
+  ```bash
+  ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
+    --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
+  ```
+- [ ] (Optional, with headset) VR LeRobot recording smoke:
+  ```bash
+  ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+    --repo_id USER/vr_dataset_name --root ~/lerobot_trossen/datasets/vr_dataset_name
+  ```
 
 ## Superseded documentation
 

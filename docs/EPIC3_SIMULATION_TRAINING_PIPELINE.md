@@ -53,8 +53,9 @@ The current implementation extends the upstream Trossen repository with Mobile A
 - [Dual-arm keyboard/gamepad teleoperation](#44-dual-arm-teleoperation) with switchable arm control
 - [Scene and randomization](#45-simulation-scene) with table, cube, spawn/color variation (defined in `reach_env_cfg.py`)
 - [LeRobot recording pipeline](#46-imitation-learning-recording-pipeline) for 14-dimensional (14D) joint state, 3 RGB cameras, validation, ACT smoke test
+- [VR LeRobot recording](#59-recording--vr-demonstrations) via `record_dual_arm_vr.py` (see [Epic 4](EPIC4_VR_INTEGRATION.md))
 
-VR teleoperation is documented separately in [Epic 4 — VR Integration](EPIC4_VR_INTEGRATION.md).
+VR teleoperation and VR dataset collection are documented in [Epic 4 — VR Integration](EPIC4_VR_INTEGRATION.md).
 
 > **Historical note:** Early planning explored a standalone Isaac Sim scene (`mobile_ai_scene.usd`) with ROS2 topics mirroring the real robot. That approach was used for initial exploration but does not match the current implementation. The digital twin is the **Isaac Lab task environment**: robot, scene, cameras, and physics defined in Python ([`reach_env_cfg.py`](#reach_env_cfgpy--scene-and-mdp-base)), not a hand-edited USD scene file.
 
@@ -128,7 +129,7 @@ flowchart LR
 
 ### Development timeline
 
-Epic 3 covers implementation steps 1–6 below. Step 7 (VR teleoperation) is covered in [Epic 4](EPIC4_VR_INTEGRATION.md). Each step maps to a section in [§4 Implementation](#4-implementation).
+Epic 3 covers implementation steps 1–6 below. Steps 7–8 (VR teleoperation and VR recording) are covered in [Epic 4](EPIC4_VR_INTEGRATION.md). Each step maps to a section in [§4 Implementation](#4-implementation).
 
 ```mermaid
 flowchart TD
@@ -139,8 +140,9 @@ flowchart TD
   S5["5. LeRobot recording"]
   S6["6. Validate + training smoke"]
   S7["7. VR teleoperation (Epic 4)"]
+  S8["8. VR + LeRobot recording (Epic 4)"]
 
-  S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+  S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
 ```
 
 > **Note:** Table, cube, and randomization (historically a separate milestone) are implemented inside [`reach_env_cfg.py`](#reach_env_cfgpy--scene-and-mdp-base) as part of step 3.
@@ -160,6 +162,7 @@ The implementation follows the [development timeline](#development-timeline) abo
 | 5 | LeRobot recording pipeline | [§4.6](#46-imitation-learning-recording-pipeline) |
 | 6 | Dataset validation + training smoke | [§5.7](#57-verify-dataset), [§5.8](#58-act-training-smoke-test) |
 | 7 | VR teleoperation | [Epic 4](EPIC4_VR_INTEGRATION.md) |
+| 8 | VR + LeRobot recording | [Epic 4 §5.4](EPIC4_VR_INTEGRATION.md#54-vr-recording-procedure) |
 
 Existing upstream files (`mobile_ai.usd`, `teleop_se3_agent.py`) were used as starting points; new articulation configs, task environments, and teleoperation scripts were added where Mobile AI required them.
 
@@ -370,7 +373,7 @@ The teleoperation library ([`se3_switch.py`](#44-dual-arm-teleoperation)) assemb
 
 #### record_env_cfg.py - IL recording
 
-This file defines the environment for [LeRobot dataset collection](#46-imitation-learning-recording-pipeline). The registered task `Isaac-Reach-MobileAI-Record-Play-v0` points at `MobileAIReachEnvCfg_RECORD_PLAY`, launched by [`record_dual_arm.py`](#56-recording--human-demonstrations). It inherits absolute IK and grippers from [`MobileAIReachEnvCfg_IK_ABS_PLAY`](#ik_abs_env_cfgpy--absolute-ik-teleoperation) and retargets observations and sensors for the `trossen_ai_2026` dataset schema.
+This file defines the environment for [LeRobot dataset collection](#46-imitation-learning-recording-pipeline). The registered task `Isaac-Reach-MobileAI-Record-Play-v0` points at `MobileAIReachEnvCfg_RECORD_PLAY`, launched by [`record_dual_arm.py`](#56-recording--human-demonstrations) or [`record_dual_arm_vr.py`](#59-recording--vr-demonstrations). It inherits absolute IK and grippers from [`MobileAIReachEnvCfg_IK_ABS_PLAY`](#ik_abs_env_cfgpy--absolute-ik-teleoperation) and retargets observations and sensors for the `trossen_ai_2026_project` dataset schema.
 
 - **`MobileAIRecordSceneCfg`**: Extends `MobileAIReachSceneCfg` with three RGB camera sensors (`cam_high`, `cam_left_wrist`, `cam_right_wrist`) at 480×640, bound to existing USD camera prims on the robot.
 - **`RecordObservationsCfg`**: Replaces the reach-task policy observations with a single **14D absolute joint position** vector (7 joints per follower arm), matching the real-robot LeRobot layout. No pose commands or velocity noise.
@@ -392,14 +395,14 @@ class MobileAIReachEnvCfg_RECORD_PLAY(MobileAIReachEnvCfg_IK_ABS_PLAY):
         self.commands = EmptyCommandsCfg() # no random EE targets during recording
 ```
 
-Joint positions captured at each step become the dataset `action` labels ([§4.6](#46-imitation-learning-recording-pipeline)); IK commands drive the robot during collection but are not stored directly.
+Commanded joint position targets captured at each step become the dataset `action` labels ([§4.6](#46-imitation-learning-recording-pipeline)); IK commands drive the robot during collection but are not stored directly.
 
 **Registered tasks (fork):**
 
 | Task ID | Config class | Launched by |
 |---------|--------------|-------------|
-| `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | `MobileAIReachEnvCfg_IK_ABS_PLAY` | [`teleop_dual_arm_switch.py`](#53-keyboard-or-gamepad-teleoperation) |
-| `Isaac-Reach-MobileAI-Record-Play-v0` | `MobileAIReachEnvCfg_RECORD_PLAY` | [`record_dual_arm.py`](#56-recording--human-demonstrations) |
+| `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | `MobileAIReachEnvCfg_IK_ABS_PLAY` | [`teleop_dual_arm_switch.py`](#53-keyboard-or-gamepad-teleoperation), [`teleop_dual_arm_vr.py`](EPIC4_VR_INTEGRATION.md#52-mobile-ai-vr-teleoperation) |
+| `Isaac-Reach-MobileAI-Record-Play-v0` | `MobileAIReachEnvCfg_RECORD_PLAY` | [`record_dual_arm.py`](#56-recording--human-demonstrations), [`record_dual_arm_vr.py`](#59-recording--vr-demonstrations) |
 
 **IK-Rel to IK-Abs migration:** Early experiments used IK-Rel (12D relative pose deltas). Arm drift and control instability led to a switch to IK-Abs (16D). See [§6.1 Arm Drift](#61-arm-drift-resolved) for the full investigation and resolution.
 
@@ -481,20 +484,25 @@ The digital twin scene (grey table, manipulable cube, and reset randomization) i
 Teleoperation ([§4.4](#44-dual-arm-teleoperation)) moves the robot; imitation learning requires saved episodes in a standard format. The pipeline builds on the [record task config](#record_env_cfgpy--il-recording) and consists of:
 
 1. The **Record task** (`Isaac-Reach-MobileAI-Record-Play-v0`). See [`record_env_cfg.py`](#record_env_cfgpy--il-recording).
-2. A **LeRobot dataset writer** (`source/.../recording/`) that captures frames each simulation step
-3. Offline **validation** ([§5.7](#57-verify-dataset)) and **training smoke** ([§5.8](#58-act-training-smoke-test)) scripts
+2. **Recording entrypoints** — keyboard/gamepad ([`record_dual_arm.py`](#56-recording--human-demonstrations)) and VR ([`record_dual_arm_vr.py`](#59-recording--vr-demonstrations); see [Epic 4](EPIC4_VR_INTEGRATION.md))
+3. A **LeRobot dataset writer** (`source/.../recording/`) that captures frames each simulation step
+4. Offline **validation** ([§5.7](#57-verify-dataset)) and **training smoke** ([§5.8](#58-act-training-smoke-test)) scripts
 
 ```mermaid
 flowchart LR
-  Op["Operator teleoperates"]
+  OpKB["Operator (keyboard/gamepad)"]
+  OpVR["Operator (VR hands)"]
   RecScript["record_dual_arm.py"]
+  RecVR["record_dual_arm_vr.py"]
   RecEnv["Record-Play task"]
   Capture["Frame capture each step"]
   LeRobot["LeRobot dataset on disk"]
   Verify["verify_dataset.py"]
   Train["smoke_train_act.py"]
 
-  Op --> RecScript --> RecEnv --> Capture --> LeRobot --> Verify --> Train
+  OpKB --> RecScript --> RecEnv
+  OpVR --> RecVR --> RecEnv
+  RecEnv --> Capture --> LeRobot --> Verify --> Train
 ```
 
 **Dataset schema:**
@@ -502,12 +510,12 @@ flowchart LR
 | Field | Shape | Description |
 |-------|-------|-------------|
 | `observation.state` | 14D float32 | Follower arm joint positions (7 per arm) |
-| `action` | 14D float32 | Joint positions (same as state at record time) |
+| `action` | 14D float32 | Commanded joint position targets (7 per arm) |
 | `observation.images.cam_high` | 480×640 RGB video | Overhead camera |
 | `observation.images.cam_left_wrist` | 480×640 RGB video | Left wrist camera |
 | `observation.images.cam_right_wrist` | 480×640 RGB video | Right wrist camera |
 
-> **Design note:** Actions are stored as joint positions, not IK commands. Policies learn target joint angles; the recorder stores resulting joint state as the action label.
+> **Design note:** Actions are stored as **commanded joint position targets**, not IK pose commands. During teleoperation the operator drives 16D IK-Abs actions; the recorder captures the resulting joint targets that the action manager applies. This matches the real-robot `trossen_ai_2026_project` LeRobot layout.
 
 **Recording controls:** **N** (toggle episode), **M** (discard), **R** (reset). Same bindings as the [keyboard table in §4.4](#44-dual-arm-teleoperation).
 
@@ -526,13 +534,16 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 | `source/.../recording/` | LeRobot writer, frame capture | Imported by IL scripts |
 | `source/.../tasks/.../mobile_ai/` | Task environment configs | Registered as gym tasks |
 
-**Branch history:**
+**Branch history** (all integration work is on `main` as of PR #2 and PR #3):
 
 | Branch | Status |
 |--------|--------|
-| `feat/il-pipeline-integration` | Current integration target |
+| `main` | Current branch; IL pipeline + VR recording merged |
+| `feat/il-pipeline-integration` | Merged (PR #3) |
+| `feat/vr-recording-integration` | Merged (PR #2) |
 | `feat/il-record-phase2` | Merged (LeRobot writer) |
 | `feat/sim-environment` | Merged (table, cube, randomization) |
+| `feat/vr-handtracking-teleop` | Merged (VR teleoperation) |
 | `feat/sim-training` | Deprecated (HDF5/Robomimic approach) |
 
 Full branch details: [IL_PIPELINE_BRANCHES.md](IL_PIPELINE_BRANCHES.md)
@@ -646,6 +657,22 @@ python scripts/imitation_learning/training/smoke_train_act.py \
 
 **Expected result:** Training completes a short smoke iteration without errors.
 
+### 5.9 Recording — VR Demonstrations
+
+**Purpose:** Collect bimanual VR teleoperated episodes into a LeRobot dataset ([Epic 4 §5.4](EPIC4_VR_INTEGRATION.md#54-vr-recording-procedure)). Requires a configured Quest 3 + ALVR + SteamVR stack.
+
+```bash
+cd ~/trossen_ai_isaac
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+  --repo_id YOUR_USERNAME/dataset_name \
+  --root ~/lerobot_trossen/datasets/dataset_name \
+  --fps 60
+```
+
+The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0` and enables cameras automatically. Workstation controls: **U** (start teleop without recording), **N** (toggle episode), **M** (discard), **J** (reset).
+
+**Expected result:** Dataset files (parquet and MP4) appear under `--root`. Verify with [§5.7](#57-verify-dataset).
+
 ---
 
 ## 6. Findings and Limitations
@@ -665,8 +692,10 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 ### 6.3 Current Limitations
 
 - **No Mobile AI RL/PPO** unlike stock WXAI reach, lift, and cabinet tasks
-- **VR + recording not integrated:** keyboard/gamepad recording works; VR teleoperation exists but does not yet write LeRobot datasets ([Epic 4 §6.3](EPIC4_VR_INTEGRATION.md#63-current-limitations))
+- **No sim policy evaluation in-repo:** no script to load an ACT checkpoint and roll out in the Record task (WXAI has `play.py` for PPO only)
 - **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment
+- **VR recording hardware validation pending:** `record_dual_arm_vr.py` is implemented; headset-on-workstation confirmation of camera quality and XR compatibility is still required ([Epic 4 §6.3](EPIC4_VR_INTEGRATION.md#63-current-limitations))
+- **No task success metrics:** rewards and terminations are placeholders; the Reach scene is an IL recording sandbox without automated success criteria
 
 ---
 
@@ -700,14 +729,16 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 - [x] [Dual-arm Reach task](#43-custom-reach-task-environment) (IK-Abs)
 - [x] [Keyboard and gamepad teleoperation](#44-dual-arm-teleoperation)
 - [x] [Table, cube, randomization](#45-simulation-scene)
-- [x] [LeRobot recording pipeline](#46-imitation-learning-recording-pipeline)
+- [x] [LeRobot recording pipeline](#46-imitation-learning-recording-pipeline) (keyboard/gamepad)
+- [x] [VR + LeRobot recording](#59-recording--vr-demonstrations) → [Epic 4](EPIC4_VR_INTEGRATION.md)
 - [x] [Dataset validation and ACT training smoke](#57-verify-dataset)
 
 ### Planned or in progress
 
-- [ ] VR + LeRobot recording integration → [Epic 4](EPIC4_VR_INTEGRATION.md)
-- [ ] Full policy training and sim-to-real deployment
+- [ ] Sim policy evaluation (ACT rollout in simulation)
+- [ ] Full policy training workflow and sim-to-real deployment
 - [ ] Mobile AI reinforcement learning tasks
+- [ ] Task success metrics and manipulation goals beyond the recording sandbox
 
 ### Related documentation
 
