@@ -26,47 +26,23 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Installation script for the 'trossen_ai_isaac' python package."""
+"""Load ``teleop/cli.py`` before Isaac ``AppLauncher`` without importing the package root."""
 
-import os
+from __future__ import annotations
 
-import toml
-from setuptools import find_packages, setup
+import importlib.util
+from pathlib import Path
+from types import ModuleType
 
-# Obtain the extension data from the extension.toml file
-EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
-# Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(
-    os.path.join(EXTENSION_PATH, "config", "extension.toml")
-)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CLI_PATH = _REPO_ROOT / "source/trossen_ai_isaac/trossen_ai_isaac/teleop/cli.py"
 
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "trossen_arm",
-]
 
-# Installation operation
-setup(
-    name="trossen_ai_isaac",
-    packages=find_packages(),
-    author=EXTENSION_TOML_DATA["package"]["author"],
-    maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
-    url=EXTENSION_TOML_DATA["package"]["repository"],
-    version=EXTENSION_TOML_DATA["package"]["version"],
-    description=EXTENSION_TOML_DATA["package"]["description"],
-    keywords=EXTENSION_TOML_DATA["package"]["keywords"],
-    install_requires=INSTALL_REQUIRES,
-    license="BSD-3-Clause",
-    include_package_data=True,
-    python_requires=">=3.10",
-    classifiers=[
-        "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Isaac Sim :: 4.5.0",
-        "Isaac Sim :: 5.0.0",
-        "Isaac Sim :: 5.1.0",
-    ],
-    zip_safe=False,
-)
+def load_teleop_cli() -> ModuleType:
+    """Return the teleop CLI helper module (argparse only; safe pre-AppLauncher)."""
+    spec = importlib.util.spec_from_file_location("trossen_ai_isaac_teleop_cli", _CLI_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load teleop CLI module from {_CLI_PATH}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod

@@ -26,47 +26,49 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Installation script for the 'trossen_ai_isaac' python package."""
+"""LeRobot feature schema aligned with ``trossen_ai_2026_project``."""
 
-import os
+from __future__ import annotations
 
-import toml
-from setuptools import find_packages, setup
-
-# Obtain the extension data from the extension.toml file
-EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
-# Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(
-    os.path.join(EXTENSION_PATH, "config", "extension.toml")
-)
-
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "trossen_arm",
+# Logical joint names in LeRobot dataset order (14D).
+JOINT_NAMES: list[str] = [
+    "left_joint_0",
+    "left_joint_1",
+    "left_joint_2",
+    "left_joint_3",
+    "left_joint_4",
+    "left_joint_5",
+    "left_joint_6",
+    "right_joint_0",
+    "right_joint_1",
+    "right_joint_2",
+    "right_joint_3",
+    "right_joint_4",
+    "right_joint_5",
+    "right_joint_6",
 ]
 
-# Installation operation
-setup(
-    name="trossen_ai_isaac",
-    packages=find_packages(),
-    author=EXTENSION_TOML_DATA["package"]["author"],
-    maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
-    url=EXTENSION_TOML_DATA["package"]["repository"],
-    version=EXTENSION_TOML_DATA["package"]["version"],
-    description=EXTENSION_TOML_DATA["package"]["description"],
-    keywords=EXTENSION_TOML_DATA["package"]["keywords"],
-    install_requires=INSTALL_REQUIRES,
-    license="BSD-3-Clause",
-    include_package_data=True,
-    python_requires=">=3.10",
-    classifiers=[
-        "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Isaac Sim :: 4.5.0",
-        "Isaac Sim :: 5.0.0",
-        "Isaac Sim :: 5.1.0",
-    ],
-    zip_safe=False,
-)
+CAMERA_KEYS: tuple[str, ...] = ("cam_high", "cam_left_wrist", "cam_right_wrist")
+IMAGE_SHAPE: tuple[int, int, int] = (480, 640, 3)
+
+
+def lerobot_features() -> dict:
+    """Return the LeRobot ``features`` dict for ``LeRobotDataset.create()``."""
+    features = {
+        "observation.state": {
+            "dtype": "float32",
+            "shape": (len(JOINT_NAMES),),
+            "names": list(JOINT_NAMES),
+        },
+        "action": {
+            "dtype": "float32",
+            "shape": (len(JOINT_NAMES),),
+            "names": list(JOINT_NAMES),
+        },
+    }
+    for cam_key in CAMERA_KEYS:
+        features[f"observation.images.{cam_key}"] = {
+            "dtype": "video",
+            "shape": IMAGE_SHAPE,
+        }
+    return features

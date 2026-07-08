@@ -28,7 +28,8 @@
 
 import gymnasium as gym
 
-from ..ik_abs_env_cfg import MobileAIReachEnvCfg_IK_ABS, MobileAIReachEnvCfg_IK_ABS_PLAY
+from ..ik_abs_env_cfg import MobileAIReachEnvCfg_IK_ABS_PLAY
+from ..record_env_cfg import MobileAIReachEnvCfg_RECORD_PLAY
 
 ##
 # Register Gym environments.
@@ -39,19 +40,23 @@ from ..ik_abs_env_cfg import MobileAIReachEnvCfg_IK_ABS, MobileAIReachEnvCfg_IK_
 ##
 
 gym.register(
-    id="Isaac-Reach-MobileAI-IK-Abs-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    kwargs={
-        "env_cfg_entry_point": MobileAIReachEnvCfg_IK_ABS,
-    },
-    disable_env_checker=True,
-)
-
-gym.register(
     id="Isaac-Reach-MobileAI-IK-Abs-Play-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": MobileAIReachEnvCfg_IK_ABS_PLAY,
+    },
+    disable_env_checker=True,
+)
+
+##
+# IL Recording - 14D joint obs + 3 RGB cameras @ 60 Hz
+##
+
+gym.register(
+    id="Isaac-Reach-MobileAI-Record-Play-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": MobileAIReachEnvCfg_RECORD_PLAY,
     },
     disable_env_checker=True,
 )

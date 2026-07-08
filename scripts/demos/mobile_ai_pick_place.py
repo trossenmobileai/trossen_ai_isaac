@@ -32,13 +32,14 @@ Mobile AI Sequential Pick-and-Place Demonstration.
 This script demonstrates mobile base motion and dual-arm pick-and-place manipulation using the Mobile AI robot.
 
 Usage:
-    ~/isaacsim/python.sh scripts/mobile_ai_pick_place.py
+    ~/isaacsim/python.sh scripts/demos/mobile_ai_pick_place.py
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 from isaacsim import SimulationApp
 
@@ -59,7 +60,7 @@ from isaacsim.core.simulation_manager import SimulationManager  # noqa: E402
 from isaacsim.core.utils.viewports import set_camera_view  # noqa: E402
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
 
-sys.path.append(os.path.dirname(__file__))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from controller import RobotType, TrossenAIController  # noqa: E402
 
 # Default configuration constants

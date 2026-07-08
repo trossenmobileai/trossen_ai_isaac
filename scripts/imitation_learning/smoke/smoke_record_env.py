@@ -26,58 +26,50 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Dual-arm switchable teleoperation for the Mobile AI robot (IK-Abs, 16D).
-
-Controls the left and right arms one at a time using a single Se3 input device.
-See ``trossen_ai_isaac.teleop.se3_switch`` for implementation details.
-"""
+"""Smoke test for the Mobile AI IL record environment."""
 
 import argparse
-import logging
-import sys
-from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-_scripts_dir = next(p for p in Path(__file__).resolve().parents if p.name == "scripts")
-sys.path.insert(0, str(_scripts_dir / "lib"))
-from teleop_cli_loader import load_teleop_cli
-
-teleop_cli = load_teleop_cli()
-
-parser = argparse.ArgumentParser(
-    description="Dual-arm switchable teleoperation for Mobile AI robot (IK-Abs, 16D)."
+parser = argparse.ArgumentParser(description="Smoke test for Mobile AI record environment.")
+parser.add_argument(
+    "--task",
+    type=str,
+    default="Isaac-Reach-MobileAI-Record-Play-v0",
+    help="Gym task id for the record environment.",
 )
-teleop_cli.add_mobile_ai_teleop_args(parser)
-
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+parser.add_argument(
+    "--num_steps",
+    type=int,
+    default=60,
+    help="Number of zero-action steps to run after reset.",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-app_launcher = AppLauncher(vars(args_cli))
-simulation_app = app_launcher.app
+args_cli.enable_cameras = True
 
-import gymnasium as gym
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
 
 import isaaclab_tasks  # noqa: F401
 import trossen_ai_isaac.tasks  # noqa: F401
-from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
-from trossen_ai_isaac.teleop.se3_switch import run_se3_switch_loop
-
-logger = logging.getLogger(__name__)
+from trossen_ai_isaac.recording.smoke import run_zero_action_env_smoke
 
 
 def main() -> None:
-    """Run dual-arm switchable IK-Abs teleoperation (no recording)."""
-    env_cfg = make_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
-    try:
-        env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
-    except Exception as exc:
-        logger.error("Failed to create environment: %s", exc)
-        simulation_app.close()
-        return
-
-    run_se3_switch_loop(simulation_app, env, env_cfg, args_cli, recorder=None)
+    """Create the record env, step with zero actions, and print obs/camera shapes."""
+    run_zero_action_env_smoke(
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        num_steps=args_cli.num_steps,
+    )
 
 
 if __name__ == "__main__":
-    main()
-    simulation_app.close()
+    try:
+        main()
+    finally:
+        simulation_app.close()

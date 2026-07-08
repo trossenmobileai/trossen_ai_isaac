@@ -26,47 +26,18 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Installation script for the 'trossen_ai_isaac' python package."""
+"""LeRobot dataset recording helpers for Mobile AI sim demonstrations."""
 
-import os
+from trossen_ai_isaac.recording.camera_compat import CameraCompatProbe
+from trossen_ai_isaac.recording.lerobot_recorder import LeRobotRecorder
+from trossen_ai_isaac.recording.runtime import install_recording_signal_handlers, run_recording_session
+from trossen_ai_isaac.recording.smoke import run_zero_action_dataset_smoke, run_zero_action_env_smoke
 
-import toml
-from setuptools import find_packages, setup
-
-# Obtain the extension data from the extension.toml file
-EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
-# Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(
-    os.path.join(EXTENSION_PATH, "config", "extension.toml")
-)
-
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "trossen_arm",
+__all__ = [
+    "CameraCompatProbe",
+    "LeRobotRecorder",
+    "install_recording_signal_handlers",
+    "run_recording_session",
+    "run_zero_action_dataset_smoke",
+    "run_zero_action_env_smoke",
 ]
-
-# Installation operation
-setup(
-    name="trossen_ai_isaac",
-    packages=find_packages(),
-    author=EXTENSION_TOML_DATA["package"]["author"],
-    maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
-    url=EXTENSION_TOML_DATA["package"]["repository"],
-    version=EXTENSION_TOML_DATA["package"]["version"],
-    description=EXTENSION_TOML_DATA["package"]["description"],
-    keywords=EXTENSION_TOML_DATA["package"]["keywords"],
-    install_requires=INSTALL_REQUIRES,
-    license="BSD-3-Clause",
-    include_package_data=True,
-    python_requires=">=3.10",
-    classifiers=[
-        "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Isaac Sim :: 4.5.0",
-        "Isaac Sim :: 5.0.0",
-        "Isaac Sim :: 5.1.0",
-    ],
-    zip_safe=False,
-)
