@@ -77,13 +77,13 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
     table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         spawn=sim_utils.CuboidCfg(
-            size=(0.99, 2.0, 0.71),  # Width, Length, Height of the table
+            size=(0.99, 2.0, 0.807),  # Width, Length, Height of the table
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.3, 0.3)), # Grey table
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.85, 0.0, 0.355),  # Positioned right in front of the robot base
+            pos=(0.85, 0.0, 0.4035),  # Positioned right in front of the robot base
         ),
     )
 
@@ -97,7 +97,7 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.85, 0.0, 0.745), # Placed perfectly on the surface of the table
+            pos=(0.85, 0.0, 0.842), # Placed perfectly on the surface of the table
         ),
     )
 
@@ -247,8 +247,8 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("cube"),
             "pose_range": {
-                "x": (-0.13, 0.11),
-                "y": (-0.49, 0.46),
+                "x": (-0.10, 0.0),
+                "y": (-0.20, 0.20),
                 "z": (0.0, 0.0),
             },
             "velocity_range": {},
