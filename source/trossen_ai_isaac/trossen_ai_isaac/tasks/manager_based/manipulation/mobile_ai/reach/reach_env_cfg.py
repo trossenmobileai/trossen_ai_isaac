@@ -90,14 +90,14 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.07, 0.07, 0.07),
+            size=(0.030, 0.030, 0.030),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.85, 0.0, 0.842), # Placed perfectly on the surface of the table
+            pos=(0.85, 0.0, 0.822), # Placed perfectly on the surface of the table (0.807 + 0.030/2)
         ),
     )
 

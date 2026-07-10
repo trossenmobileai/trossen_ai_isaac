@@ -42,6 +42,27 @@ def add_vr_teleop_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--dual_arm",
+        action="store_true",
+        help=(
+            "Teleoperate BOTH arms simultaneously (left hand -> left arm, right hand -> "
+            "right arm). Default (flag absent) is single-arm mode, where only one arm "
+            "tracks its hand at a time and the other holds its last pose; press TAB at the "
+            "workstation to switch the active arm. Single-arm mode avoids recording bad data "
+            "when the idle hand's tracking drifts or drops."
+        ),
+    )
+    parser.add_argument(
+        "--start_arm",
+        type=str,
+        default="left",
+        choices=["left", "right"],
+        help=(
+            "Which arm is active first in single-arm mode. Ignored when --dual_arm is set. "
+            "Switch at runtime with TAB."
+        ),
+    )
+    parser.add_argument(
         "--pinch_hold_dist",
         type=float,
         default=0.08,

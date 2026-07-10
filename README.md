@@ -251,7 +251,7 @@ WXAI teleoperation for data collection:
 | Script | Robot | Task / notes |
 |--------|-------|----------------|
 | `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs teleop (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) |
-| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR) |
+| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR). Single-arm by default (TAB switches active arm, other arm frozen); pass `--dual_arm` for both arms at once |
 | `record_dual_arm.py` | Mobile AI | Keyboard/gamepad LeRobot recording |
 | `record_dual_arm_vr.py` | Mobile AI | VR LeRobot recording |
 | `teleop_se3_agent.py` | WXAI | Generic Se3 keyboard/gamepad teleop |
@@ -263,6 +263,9 @@ WXAI teleoperation for data collection:
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0 --teleop_device keyboard
 
 # Mobile AI VR (requires headset + ALVR/SteamVR OpenXR runtime)
+# Single-arm by default: only the active arm tracks its hand, the other holds
+# its pose. Press TAB at the workstation to switch the active arm (--start_arm
+# sets which arm starts). Add --dual_arm to drive both arms simultaneously.
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
 ```
@@ -291,6 +294,8 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
     --fps 60 --enable_cameras
 
 # Record demonstrations — VR (U=start teleop, N=toggle episode, M=discard, J=reset)
+# Single-arm by default (TAB switches the active arm, other arm frozen); add
+# --dual_arm to record with both arms tracking simultaneously.
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
     --repo_id USER/dataset_name \
     --root ~/lerobot_trossen/datasets/dataset_name \
