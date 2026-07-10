@@ -348,10 +348,11 @@ Use the dedicated VR recording entrypoint:
 cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
   --repo_id YourUser/mobile_ai_vr_reach \
-  --root /tmp/mobile_ai_vr_reach
+  --root /tmp/mobile_ai_vr_reach \
+  --record_arm both
 ```
 
-The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps the three record cameras enabled, and uses workstation-side controls:
+The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps the record cameras enabled, and uses workstation-side controls:
 
 - `N`: start recording the current episode, then save-and-reset on the next press
 - `M`: discard the current episode buffer
@@ -359,6 +360,26 @@ The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps the three re
 - `I`: pause teleop
 - `B`: re-anchor the current VR control frame
 - `J`: reset the environment and discard any in-progress episode
+
+#### One-arm vs two-arm recording (`--record_arm`)
+
+`--record_arm` selects both what is written to the dataset and which arm(s) the operator teleoperates, so the recorded columns always match the controlled arm:
+
+| Mode | `observation.state` / `action` | Cameras | Teleop control |
+|------|-------------------------------|---------|----------------|
+| `both` (default) | 14D (`left_joint_0..6`, `right_joint_0..6`) | `cam_high`, `cam_left_wrist`, `cam_right_wrist` | both arms simultaneously |
+| `left` | 7D (`left_joint_0..6`) | `cam_high`, `cam_left_wrist` | locked to left arm (TAB disabled) |
+| `right` | 7D (`right_joint_0..6`) | `cam_high`, `cam_right_wrist` | locked to right arm (TAB disabled) |
+
+```bash
+# Right-arm-only dataset (7D + cam_high + cam_right_wrist)
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+  --repo_id YourUser/mobile_ai_vr_right \
+  --root /tmp/mobile_ai_vr_right \
+  --record_arm right
+```
+
+All three modes produce a standard, self-describing [LeRobot v3](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) dataset (same directory layout and `meta/info.json` structure); only the declared feature dimensions and the set of `observation.images.*` cameras differ.
 
 For the staged XR camera-compatibility experiment, run the teleop script with camera retention and probing enabled:
 

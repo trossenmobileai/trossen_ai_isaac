@@ -32,29 +32,37 @@ from __future__ import annotations
 
 import numpy as np
 
-from trossen_ai_isaac.recording.schema import CAMERA_KEYS
+from trossen_ai_isaac.recording.schema import RecordingLayout
 from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import (
     record_joint_pos_14,
     record_joint_target_14,
 )
 
 
-def capture_state(env) -> np.ndarray:
-    """Return 14D follower joint positions as a float32 numpy vector."""
+def _resolve_layout(layout: RecordingLayout | None) -> RecordingLayout:
+    """Default to the full dual-arm layout when none is provided."""
+    return layout if layout is not None else RecordingLayout.from_arm_mode("both")
+
+
+def capture_state(env, layout: RecordingLayout | None = None) -> np.ndarray:
+    """Return follower joint positions (sliced to ``layout``) as float32."""
+    layout = _resolve_layout(layout)
     joints = record_joint_pos_14(env)[0].detach().cpu().numpy().astype(np.float32)
-    return joints
+    return joints[layout.joint_indices]
 
 
-def capture_action(env) -> np.ndarray:
-    """Return 14D commanded joint targets as a float32 numpy vector."""
+def capture_action(env, layout: RecordingLayout | None = None) -> np.ndarray:
+    """Return commanded joint targets (sliced to ``layout``) as float32."""
+    layout = _resolve_layout(layout)
     joints = record_joint_target_14(env)[0].detach().cpu().numpy().astype(np.float32)
-    return joints
+    return joints[layout.joint_indices]
 
 
-def capture_images(env) -> dict[str, np.ndarray]:
-    """Return uint8 HWC RGB images keyed by camera scene name."""
+def capture_images(env, layout: RecordingLayout | None = None) -> dict[str, np.ndarray]:
+    """Return uint8 HWC RGB images keyed by the camera scene names in ``layout``."""
+    layout = _resolve_layout(layout)
     images: dict[str, np.ndarray] = {}
-    for cam_key in CAMERA_KEYS:
+    for cam_key in layout.camera_keys:
         rgb = env.scene[cam_key].data.output["rgb"][0].detach().cpu().numpy()
         if rgb.shape[-1] == 4:
             rgb = rgb[..., :3]
@@ -62,11 +70,16 @@ def capture_images(env) -> dict[str, np.ndarray]:
     return images
 
 
-def capture_frame(env, task: str) -> dict:
-    """Bundle state, commanded action, images, and task string for LeRobot."""
-    state = capture_state(env)
-    action = capture_action(env)
-    images = capture_images(env)
+def capture_frame(env, task: str, layout: RecordingLayout | None = None) -> dict:
+    """Bundle state, commanded action, images, and task string for LeRobot.
+
+    ``layout`` selects which joints and cameras are recorded; when omitted the
+    full dual-arm layout (14D + 3 cameras) is used for backward compatibility.
+    """
+    layout = _resolve_layout(layout)
+    state = capture_state(env, layout)
+    action = capture_action(env, layout)
+    images = capture_images(env, layout)
     frame = {
         "observation.state": state,
         "action": action,

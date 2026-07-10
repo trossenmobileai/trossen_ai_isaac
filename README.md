@@ -294,11 +294,15 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
     --fps 60 --enable_cameras
 
 # Record demonstrations — VR (U=start teleop, N=toggle episode, M=discard, J=reset)
-# Single-arm by default (TAB switches the active arm, other arm frozen); add
-# --dual_arm to record with both arms tracking simultaneously.
+# --record_arm selects what goes into the dataset AND locks teleop to match:
+#   both  (default) => 14D state/action + 3 cameras, both arms teleoperated
+#   left / right     => 7D that-arm joints + cam_high + that arm's wrist camera,
+#                       teleop locked to that arm (TAB disabled). Still a valid
+#                       LeRobot v3 dataset, just fewer feature dims/cameras.
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
     --repo_id USER/dataset_name \
     --root ~/lerobot_trossen/datasets/dataset_name \
+    --record_arm right \
     --fps 60
 
 # Verify offline

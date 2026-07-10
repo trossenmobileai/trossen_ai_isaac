@@ -234,6 +234,9 @@ def run_vr_recording_loop(
     RIGHT_ARM = "right"
     single_arm = not bool(getattr(args_cli, "dual_arm", False))
     active_arm = getattr(args_cli, "start_arm", LEFT_ARM)
+    # When locked (e.g. single-arm recording), the active arm cannot be switched
+    # with TAB, so the recorded columns always match the arm being teleoperated.
+    lock_active_arm = bool(getattr(args_cli, "lock_active_arm", False))
     body_idx_map = {LEFT_ARM: left_body_idx, RIGHT_ARM: right_body_idx}
     # Frozen (base-frame) 7D pose + gripper scalar of each arm; the inactive arm is
     # driven from these held values so it stays put regardless of its hand tracking.
@@ -521,7 +524,7 @@ def run_vr_recording_loop(
             keyboard_interface.add_callback("M", discard_episode)
         keyboard_interface.add_callback("B", reanchor)
         keyboard_interface.add_callback("J", reset_env)
-        if single_arm:
+        if single_arm and not lock_active_arm:
             keyboard_interface.add_callback("TAB", toggle_arm)
     except Exception as exc:
         logger.warning(
@@ -561,7 +564,9 @@ def run_vr_recording_loop(
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
     print(f"  Task:        {args_cli.task}")
     print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D pose + 2 binary grippers)")
-    if single_arm:
+    if single_arm and lock_active_arm:
+        print(f"  Arm mode:    single-arm LOCKED to {active_arm.upper()} (TAB disabled; other arm frozen)")
+    elif single_arm:
         print(f"  Arm mode:    single-arm (active={active_arm.upper()}; TAB=switch, other arm frozen)")
     else:
         print("  Arm mode:    dual-arm (both hands drive both arms; --dual_arm)")
@@ -624,7 +629,7 @@ def run_vr_recording_loop(
     else:
         print("  Pinch latch: disabled (--pinch_hold_dist 0)")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
-    switch_hint = "  TAB=switch arm" if single_arm else ""
+    switch_hint = "  TAB=switch arm" if (single_arm and not lock_active_arm) else ""
     if keyboard_interface is not None and recorder is None:
         print(f"  Keys:        N=start  M=pause  B=re-anchor  J=reset{switch_hint}  (workstation keyboard)")
     elif keyboard_interface is not None:
