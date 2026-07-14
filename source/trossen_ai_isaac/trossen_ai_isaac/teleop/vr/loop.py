@@ -48,6 +48,7 @@ from isaaclab.utils.math import (
     quat_apply,
     quat_conjugate,
     quat_mul,
+    quat_slerp,
     yaw_quat,
 )
 
@@ -225,6 +226,35 @@ def run_vr_recording_loop(
         simulation_app.close()
         return
 
+    # -- Single-arm switching state --
+    # By default only ONE arm tracks its hand at a time; the other holds its last
+    # commanded pose. This prevents the idle hand's tracking drift/loss from
+    # corrupting the recorded data. --dual_arm restores simultaneous both-arm
+    # control (left hand -> left arm, right hand -> right arm).
+    LEFT_ARM = "left"
+    RIGHT_ARM = "right"
+    single_arm = not bool(getattr(args_cli, "dual_arm", False))
+    active_arm = getattr(args_cli, "start_arm", LEFT_ARM)
+    # When locked (e.g. single-arm recording), the active arm cannot be switched
+    # with TAB, so the recorded columns always match the arm being teleoperated.
+    lock_active_arm = bool(getattr(args_cli, "lock_active_arm", False))
+    body_idx_map = {LEFT_ARM: left_body_idx, RIGHT_ARM: right_body_idx}
+    # Frozen (base-frame) 7D pose + gripper scalar of each arm; the inactive arm is
+    # driven from these held values so it stays put regardless of its hand tracking.
+    held_pose: dict[str, torch.Tensor | None] = {LEFT_ARM: None, RIGHT_ARM: None}
+    held_grip: dict[str, float] = {LEFT_ARM: 1.0, RIGHT_ARM: 1.0}
+
+    def _pose_slice(arm: str) -> slice:
+        """Return the 7D slice of the 14D pose vector belonging to ``arm``."""
+        return slice(0, 7) if arm == LEFT_ARM else slice(7, 14)
+
+    def seed_held_poses() -> None:
+        """Snapshot both arms' current EE base pose as the held (frozen) targets."""
+        for arm, idx in body_idx_map.items():
+            pos, quat = _get_ee_base_pose(robot, idx)
+            held_pose[arm] = torch.cat([pos, quat]).to(dtype=torch.float32, device=args_cli.device)
+            held_grip[arm] = 1.0
+
     # -- State flags --
     # Staged start: by default we begin INACTIVE so the operator can get their
     # hands into a comfortable neutral pose first; a workstation key (N) then
@@ -397,12 +427,34 @@ def run_vr_recording_loop(
             print("[TELEOP] Deactivated (robot holds last pose; press B then U to re-engage)")
 
     def reanchor() -> None:
-        nonlocal anchor_captured
+        nonlocal anchor_captured, filt_pose_l, filt_pose_r
         # Re-snapshot the hand<->EE relationship (and head yaw) on the next active
         # frame WITHOUT pausing or resetting. Use after physically re-orienting the
         # body so "forward relative to the headset" maps to robot-forward again.
         anchor_captured = False
+        filt_pose_l = None
+        filt_pose_r = None
         print("[ANCHOR] Re-anchor requested -- will re-snapshot on next active frame")
+
+    def toggle_arm() -> None:
+        nonlocal active_arm, anchor_captured, filt_pose_l, filt_pose_r
+        if not single_arm:
+            print("[ARM SWITCH] Ignored -- running in --dual_arm mode (both arms active)")
+            return
+        # Freeze the arm we are leaving at its current resting EE pose so it holds
+        # position while inactive.
+        leaving = active_arm
+        pos, quat = _get_ee_base_pose(robot, body_idx_map[leaving])
+        held_pose[leaving] = torch.cat([pos, quat]).to(dtype=torch.float32, device=args_cli.device)
+        # Switch, then force a re-anchor so the newly active arm starts from its
+        # current resting pose (zero hand delta) and does not jump.
+        active_arm = RIGHT_ARM if active_arm == LEFT_ARM else LEFT_ARM
+        anchor_captured = False
+        # Reset the smoothing filter so it initialises to the fresh resting pose.
+        filt_pose_l = None
+        filt_pose_r = None
+        g_state = "OPEN" if held_grip[active_arm] > 0 else "CLOSE"
+        print(f"[ARM SWITCH] Now controlling: {active_arm.upper()} arm  gripper={g_state}")
 
     teleoperation_callbacks: dict[str, Callable[[], None]] = {
         "START": start_teleop,
@@ -478,6 +530,8 @@ def run_vr_recording_loop(
             keyboard_interface.add_callback("M", discard_episode)
         keyboard_interface.add_callback("B", reanchor)
         keyboard_interface.add_callback("J", reset_env)
+        if single_arm and not lock_active_arm:
+            keyboard_interface.add_callback("TAB", toggle_arm)
     except Exception as exc:
         logger.warning(
             f"Failed to create keyboard sidecar ({exc}); workstation key controls "
@@ -487,7 +541,8 @@ def run_vr_recording_loop(
         keyboard_interface = None
 
     # -- Debug markers (EE goal frames + hand keypoints) --
-    show_markers = not args_cli.no_hand_markers
+    # Always disabled when recording so the markers never appear in camera frames.
+    show_markers = (not args_cli.no_hand_markers) and recorder is None
     ee_goal_markers = None
     hand_kp_markers = None
     if show_markers:
@@ -516,6 +571,12 @@ def run_vr_recording_loop(
     print("VR DUAL-ARM TELEOPERATION (hand tracking)")
     print(f"  Task:        {args_cli.task}")
     print(f"  Action dim:  {ACTION_DIM_ENV} (left 7D + right 7D pose + 2 binary grippers)")
+    if single_arm and lock_active_arm:
+        print(f"  Arm mode:    single-arm LOCKED to {active_arm.upper()} (TAB disabled; other arm frozen)")
+    elif single_arm:
+        print(f"  Arm mode:    single-arm (active={active_arm.upper()}; TAB=switch, other arm frozen)")
+    else:
+        print("  Arm mode:    dual-arm (both hands drive both arms; --dual_arm)")
     print(f"  View:        {args_cli.view}")
     print("  Gripper:     pinch (thumb-index) -> binary open/close per hand")
     if anchor_mode == "hand_anchored":
@@ -575,10 +636,11 @@ def run_vr_recording_loop(
     else:
         print("  Pinch latch: disabled (--pinch_hold_dist 0)")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
+    switch_hint = "  TAB=switch arm" if (single_arm and not lock_active_arm) else ""
     if keyboard_interface is not None and recorder is None:
-        print("  Keys:        N=start  M=pause  B=re-anchor  J=reset  (workstation keyboard)")
+        print(f"  Keys:        N=start  M=pause  B=re-anchor  J=reset{switch_hint}  (workstation keyboard)")
     elif keyboard_interface is not None:
-        print("  Keys:        U=start  I=pause  N=record/save  M=discard  B=re-anchor  J=reset")
+        print(f"  Keys:        U=start  I=pause  N=record/save  M=discard  B=re-anchor  J=reset{switch_hint}")
     else:
         print("  Keys:        keyboard sidecar unavailable -- use --autostart to engage")
     if recorder is not None:
@@ -637,9 +699,16 @@ def run_vr_recording_loop(
     l_was_pinching = False
     r_was_pinching = False
 
+    # Exponential low-pass filter state for position + orientation smoothing.
+    # Reset whenever the anchor is re-snapshotted or the active arm switches so
+    # the filter never lags across pose discontinuities.
+    filt_pose_l: torch.Tensor | None = None
+    filt_pose_r: torch.Tensor | None = None
+
     # -- Reset --
     env.reset()
     teleop_interface.reset()
+    seed_held_poses()
 
     step_count = 0
 
@@ -679,8 +748,15 @@ def run_vr_recording_loop(
                 # without the arms jumping toward the OpenXR origin.
                 l_pos_norm = float(pose_part[:3].norm().item())
                 r_pos_norm = float(pose_part[7:10].norm().item())
+                if single_arm:
+                    # Only the active hand needs to be tracking; the operator may
+                    # keep the other hand down while switched away from it.
+                    active_norm = l_pos_norm if active_arm == LEFT_ARM else r_pos_norm
+                    hands_tracking = active_norm > warmup_min_pos
+                else:
+                    hands_tracking = l_pos_norm > warmup_min_pos and r_pos_norm > warmup_min_pos
                 if not warmup_complete:
-                    if l_pos_norm > warmup_min_pos and r_pos_norm > warmup_min_pos:
+                    if hands_tracking:
                         warmup_valid_count += 1
                         if warmup_valid_count >= warmup_frames_required:
                             warmup_complete = True
@@ -805,9 +881,52 @@ def run_vr_recording_loop(
                         l_was_pinching = l_pinching
                         r_was_pinching = r_pinching
 
+                    # Pose smoothing: exponential low-pass on position (lerp) and
+                    # orientation (slerp) to reduce Quest hand-tracking jitter.
+                    # Applied AFTER the pinch-latch (so the latched quat is also
+                    # smoothed) but BEFORE the single-arm inactive-arm overwrite
+                    # (so the frozen pose stays exactly static).
+                    _smooth_alpha = float(getattr(args_cli, "pose_smoothing", 0.0))
+                    if _smooth_alpha > 0.0:
+                        def _smooth_pose(prev: torch.Tensor | None, tgt: torch.Tensor) -> torch.Tensor:
+                            if prev is None:
+                                return tgt.clone()
+                            pos = _smooth_alpha * prev[0:3] + (1.0 - _smooth_alpha) * tgt[0:3]
+                            # quat_slerp: tau=0 returns q1, tau=1 returns q2; we want
+                            # (1-alpha) weight on the new target, alpha on the old.
+                            # Clone tgt[3:7] because quat_slerp may mutate q2 in-place.
+                            quat = quat_slerp(prev[3:7], tgt[3:7].clone(), 1.0 - _smooth_alpha)
+                            return torch.cat([pos, quat])
+
+                        filt_pose_l = _smooth_pose(filt_pose_l, target_pose[0:7])
+                        filt_pose_r = _smooth_pose(filt_pose_r, target_pose[7:14])
+                        target_pose = torch.cat([filt_pose_l, filt_pose_r])
+
+                    # Single-arm mode: only the active arm tracks its hand. Overwrite
+                    # the inactive arm's pose + gripper with their held (frozen) values
+                    # so idle-hand tracking noise/loss never reaches the robot.
+                    grip_out = grip_part
+                    if single_arm:
+                        inactive = RIGHT_ARM if active_arm == LEFT_ARM else LEFT_ARM
+                        if held_pose[inactive] is None:
+                            seed_held_poses()
+                        inactive_slice = _pose_slice(inactive)
+                        target_pose = target_pose.clone()
+                        target_pose[inactive_slice] = held_pose[inactive]
+                        # Track the active arm's live gripper; hold the inactive one.
+                        active_grip_val = float(
+                            grip_part[0].item() if active_arm == LEFT_ARM else grip_part[1].item()
+                        )
+                        held_grip[active_arm] = active_grip_val
+                        grip_out = torch.tensor(
+                            [held_grip[LEFT_ARM], held_grip[RIGHT_ARM]],
+                            dtype=grip_part.dtype,
+                            device=grip_part.device,
+                        )
+
                     # Assemble the full 16D action: arm poses + the two binary
                     # gripper scalars straight from the GripperRetargeter.
-                    target_action = torch.cat([target_pose, grip_part])
+                    target_action = torch.cat([target_pose, grip_out])
                     actions = target_action.unsqueeze(0).repeat(env.num_envs, 1)
                     env.step(actions)
                     if recorder is not None and session.episode_recording_active:
@@ -836,8 +955,9 @@ def run_vr_recording_loop(
                         state = "ANCHORING"
                     else:
                         state = f"ON/{anchor_mode}"
+                    arm_tag = f" arm={active_arm.upper()}" if single_arm else ""
                     print(
-                        f"[VR step={step_count} {state}] "
+                        f"[VR step={step_count} {state}{arm_tag}] "
                         f"L_pos={[f'{v:+.3f}' for v in l_pos]} "
                         f"R_pos={[f'{v:+.3f}' for v in r_pos]} "
                         f"L_grip={left_grip:+.2f} R_grip={right_grip:+.2f}"
@@ -848,6 +968,9 @@ def run_vr_recording_loop(
                 if session.consume_reset():
                     env.reset()
                     teleop_interface.reset()
+                    # Re-seed the held/frozen poses from the fresh reset pose so the
+                    # inactive arm holds the new resting pose, not a stale one.
+                    seed_held_poses()
                     # Re-warm-up after a reset: device pose cache was just cleared
                     # so we should re-verify tracking before re-engaging the arms.
                     warmup_complete = False
@@ -862,6 +985,10 @@ def run_vr_recording_loop(
                     latch_r_quat = None
                     l_was_pinching = False
                     r_was_pinching = False
+                    # Clear smoothing filter: the EE is back at the reset pose so
+                    # the old filtered values would lag toward the pre-reset pose.
+                    filt_pose_l = None
+                    filt_pose_r = None
                     engage_key = "U" if recorder is not None else "N"
                     print(
                         f"[RESET] Done -- teleop off; reposition hands, press B to re-anchor, "

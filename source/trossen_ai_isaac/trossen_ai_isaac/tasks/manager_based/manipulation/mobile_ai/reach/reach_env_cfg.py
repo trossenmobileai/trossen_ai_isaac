@@ -77,27 +77,27 @@ class MobileAIReachSceneCfg(InteractiveSceneCfg):
     table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         spawn=sim_utils.CuboidCfg(
-            size=(0.99, 2.0, 0.71),  # Width, Length, Height of the table
+            size=(0.99, 2.0, 0.807),  # Width, Length, Height of the table
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.3, 0.3)), # Grey table
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.85, 0.0, 0.355),  # Positioned right in front of the robot base
+            pos=(0.85, 0.0, 0.4035),  # Positioned right in front of the robot base
         ),
     )
 
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.07, 0.07, 0.07),
+            size=(0.030, 0.030, 0.030),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.1, 0.1)),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.85, 0.0, 0.745), # Placed perfectly on the surface of the table
+            pos=(0.85, 0.0, 0.822), # Placed perfectly on the surface of the table (0.807 + 0.030/2)
         ),
     )
 
@@ -247,8 +247,8 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("cube"),
             "pose_range": {
-                "x": (-0.13, 0.11),
-                "y": (-0.49, 0.46),
+                "x": (-0.10, 0.05),
+                "y": (-0.20, 0.0),
                 "z": (0.0, 0.0),
             },
             "velocity_range": {},
@@ -298,7 +298,7 @@ class MobileAIReachEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         self.decimation = 2
         self.sim.render_interval = self.decimation
-        self.episode_length_s = 12.0
+        self.episode_length_s = 30.0
         self.viewer.eye = (3.5, 3.5, 3.5)
         self.sim.dt = 1.0 / 60.0
 

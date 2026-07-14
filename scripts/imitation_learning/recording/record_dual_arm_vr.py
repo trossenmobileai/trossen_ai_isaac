@@ -27,6 +27,16 @@ AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 args_cli.enable_cameras = True
 
+# Make the teleop control mode follow the recording choice so the human always
+# drives exactly the arm(s) that get recorded. In single-arm recording we lock
+# the active arm so TAB cannot switch to the un-recorded arm mid-episode.
+if args_cli.record_arm == "both":
+    args_cli.dual_arm = True
+else:
+    args_cli.dual_arm = False
+    args_cli.start_arm = args_cli.record_arm
+    args_cli.lock_active_arm = True
+
 # Force XR runtime ON before constructing AppLauncher.
 app_launcher_args = vars(args_cli)
 app_launcher_args["xr"] = True
@@ -67,6 +77,7 @@ def main() -> None:
             task=args_cli.task_description,
             root=args_cli.root,
             overwrite=args_cli.overwrite,
+            arm_mode=args_cli.record_arm,
         )
     except (ImportError, FileExistsError) as exc:
         logger.error("%s", exc)

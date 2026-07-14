@@ -36,73 +36,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from trossen_ai_isaac.recording.frame_capture import capture_frame
+from trossen_ai_isaac.recording.schema import RecordingLayout, lerobot_features
 
 if TYPE_CHECKING:
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 logger = logging.getLogger(__name__)
-
-TROSSEN_AI_2026_FEATURES = {
-    "observation.state": {
-        "dtype": "float32",
-        "shape": (14,),
-        "names": {
-            "motors": [
-                "left_joint_0",
-                "left_joint_1",
-                "left_joint_2",
-                "left_joint_3",
-                "left_joint_4",
-                "left_joint_5",
-                "left_joint_6",
-                "right_joint_0",
-                "right_joint_1",
-                "right_joint_2",
-                "right_joint_3",
-                "right_joint_4",
-                "right_joint_5",
-                "right_joint_6",
-            ]
-        },
-    },
-    "action": {
-        "dtype": "float32",
-        "shape": (14,),
-        "names": {
-            "motors": [
-                "left_joint_0",
-                "left_joint_1",
-                "left_joint_2",
-                "left_joint_3",
-                "left_joint_4",
-                "left_joint_5",
-                "left_joint_6",
-                "right_joint_0",
-                "right_joint_1",
-                "right_joint_2",
-                "right_joint_3",
-                "right_joint_4",
-                "right_joint_5",
-                "right_joint_6",
-            ]
-        },
-    },
-    "observation.images.cam_high": {
-        "dtype": "video",
-        "shape": (480, 640, 3),
-        "names": ["height", "width", "channels"],
-    },
-    "observation.images.cam_left_wrist": {
-        "dtype": "video",
-        "shape": (480, 640, 3),
-        "names": ["height", "width", "channels"],
-    },
-    "observation.images.cam_right_wrist": {
-        "dtype": "video",
-        "shape": (480, 640, 3),
-        "names": ["height", "width", "channels"],
-    },
-}
 
 
 class LeRobotRecorder:
@@ -116,6 +55,7 @@ class LeRobotRecorder:
         root: str | Path | None = None,
         robot_type: str = "trossen_ai_mobile",
         overwrite: bool = False,
+        arm_mode: str = "both",
     ) -> None:
         try:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -136,18 +76,29 @@ class LeRobotRecorder:
                 )
 
         self.task = task
+        self.layout = RecordingLayout.from_arm_mode(arm_mode)
+        features = lerobot_features(self.layout)
         self._frame_count = 0
         self._finalized = False
         self._dataset: LeRobotDataset = LeRobotDataset.create(
             repo_id=repo_id,
             fps=fps,
-            features=TROSSEN_AI_2026_FEATURES,
+            features=features,
             robot_type=robot_type,
             root=root,
             use_videos=True,
             image_writer_threads=4,
         )
-        logger.info("LeRobot dataset created at %s (repo_id=%s, fps=%d)", self._dataset.root, repo_id, fps)
+        logger.info(
+            "LeRobot dataset created at %s (repo_id=%s, fps=%d, arm_mode=%s, "
+            "state_dim=%d, cameras=%s)",
+            self._dataset.root,
+            repo_id,
+            fps,
+            self.layout.arm_mode,
+            len(self.layout.joint_names),
+            list(self.layout.camera_keys),
+        )
 
     @property
     def frame_count(self) -> int:
@@ -159,7 +110,7 @@ class LeRobotRecorder:
 
     def on_step(self, env) -> None:
         """Capture and append one frame after ``env.step()``."""
-        frame = capture_frame(env, task=self.task)
+        frame = capture_frame(env, task=self.task, layout=self.layout)
         self._dataset.add_frame(frame)
         self._frame_count += 1
 

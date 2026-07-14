@@ -42,6 +42,27 @@ def add_vr_teleop_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--dual_arm",
+        action="store_true",
+        help=(
+            "Teleoperate BOTH arms simultaneously (left hand -> left arm, right hand -> "
+            "right arm). Default (flag absent) is single-arm mode, where only one arm "
+            "tracks its hand at a time and the other holds its last pose; press TAB at the "
+            "workstation to switch the active arm. Single-arm mode avoids recording bad data "
+            "when the idle hand's tracking drifts or drops."
+        ),
+    )
+    parser.add_argument(
+        "--start_arm",
+        type=str,
+        default="left",
+        choices=["left", "right"],
+        help=(
+            "Which arm is active first in single-arm mode. Ignored when --dual_arm is set. "
+            "Switch at runtime with TAB."
+        ),
+    )
+    parser.add_argument(
         "--pinch_hold_dist",
         type=float,
         default=0.08,
@@ -166,6 +187,24 @@ def add_vr_teleop_args(parser: argparse.ArgumentParser) -> None:
             "default -90 cancels that. Only the horizontal mapping is affected (up/down is "
             "untouched). Set 0 to disable the correction, or flip to +90/180 if your setup "
             "maps differently. Tune live without code edits."
+        ),
+    )
+    parser.add_argument(
+        "--pose_smoothing",
+        type=float,
+        default=0.5,
+        metavar="ALPHA",
+        help=(
+            "Exponential low-pass strength applied to the IK target pose each frame. "
+            "ALPHA is the weight of the PREVIOUS filtered pose (0 = raw passthrough, "
+            "1 = frozen/no movement). Concretely: at 60 Hz an ALPHA of 0.5 retains "
+            "50%% of last frame's pose, giving ~1–2 frame lag while significantly "
+            "reducing Quest hand-tracking jitter (especially wrist orientation noise). "
+            "Position is lerped; orientation is slerped (quat_slerp) so the blending "
+            "is geometrically correct. The filter is reset on re-anchor, arm switch, "
+            "and environment reset so it never lags across pose discontinuities. "
+            "Tune down toward 0.2 for more responsiveness, up toward 0.7 for more "
+            "stability. Set 0.0 to disable entirely. Default: 0.5."
         ),
     )
 

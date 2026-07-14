@@ -311,6 +311,13 @@ def run_smoke_act(
     train_env_vars = os.environ.copy()
     if device == "cpu":
         train_env_vars["CUDA_VISIBLE_DEVICES"] = ""
+    # Ensure HF datasets cache is always user-writable regardless of system state.
+    # Falls back to a workspace-local path if HF_DATASETS_CACHE is not already set
+    # (the system-default ~/.cache/huggingface/datasets/ may be root-owned).
+    if "HF_DATASETS_CACHE" not in train_env_vars:
+        user_hf_cache = Path(__file__).resolve().parents[4] / ".hf_datasets_cache"
+        user_hf_cache.mkdir(parents=True, exist_ok=True)
+        train_env_vars["HF_DATASETS_CACHE"] = str(user_hf_cache)
     result = subprocess.run(cmd, check=False, text=True, capture_output=True, env=train_env_vars)
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")

@@ -88,3 +88,16 @@ def add_record_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Replace an existing dataset at --root instead of failing.",
     )
+    parser.add_argument(
+        "--record_arm",
+        type=str,
+        default="both",
+        choices=["left", "right", "both"],
+        help=(
+            "Which arm(s) to record into the LeRobot dataset. "
+            "'both' (default) => 14D observation.state/action + 3 cameras "
+            "(cam_high, cam_left_wrist, cam_right_wrist). "
+            "'left'/'right' => 7D that-arm joints (6 arm + gripper) + cam_high + "
+            "that arm's wrist camera. All modes produce a standard LeRobot v3 dataset."
+        ),
+    )

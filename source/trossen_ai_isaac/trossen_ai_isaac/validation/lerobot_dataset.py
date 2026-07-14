@@ -44,9 +44,25 @@ except ImportError as exc:
 
 import pyarrow.parquet as pq
 
-CAMERA_KEYS = ("cam_high", "cam_left_wrist", "cam_right_wrist")
+ALL_CAMERA_KEYS = ("cam_high", "cam_left_wrist", "cam_right_wrist")
+WRIST_CAMERA_KEYS = ("cam_left_wrist", "cam_right_wrist")
 EXPECTED_ROBOT_TYPE = "trossen_ai_mobile"
+VALID_STATE_SHAPES = ([7], [14])
 MIN_PIXEL_MAX = 10
+
+_IMAGE_PREFIX = "observation.images."
+
+
+def _camera_keys_from_features(features: dict) -> list[str]:
+    """Return the camera scene keys (e.g. 'cam_high') declared in ``features``.
+
+    Ordered canonically (cam_high, cam_left_wrist, cam_right_wrist), with any
+    non-standard camera keys appended so validation still covers them.
+    """
+    present = [key[len(_IMAGE_PREFIX):] for key in features if key.startswith(_IMAGE_PREFIX)]
+    ordered = [cam for cam in ALL_CAMERA_KEYS if cam in present]
+    ordered += [cam for cam in present if cam not in ordered]
+    return ordered
 
 
 def _image_max(arr) -> float:
@@ -71,21 +87,35 @@ def _check_info(root: Path) -> dict:
     if info.get("robot_type") != EXPECTED_ROBOT_TYPE:
         raise ValueError(f"robot_type must be {EXPECTED_ROBOT_TYPE!r}, got {info.get('robot_type')!r}")
 
-    for key in ("observation.state", "action"):
-        shape = features.get(key, {}).get("shape", [])
-        if shape != [14]:
-            raise ValueError(f"{key} shape must be [14], got {shape}")
+    # State/action dims depend on the recorded arm mode (7D single-arm, 14D dual-arm).
+    # Validate internal consistency + a supported shape rather than a fixed 14D.
+    state_shape = list(features.get("observation.state", {}).get("shape", []))
+    action_shape = list(features.get("action", {}).get("shape", []))
+    if state_shape != action_shape:
+        raise ValueError(
+            f"observation.state shape {state_shape} must equal action shape {action_shape}"
+        )
+    if state_shape not in VALID_STATE_SHAPES:
+        raise ValueError(
+            f"observation.state/action shape must be one of {VALID_STATE_SHAPES}, got {state_shape}"
+        )
 
-    for cam_key in CAMERA_KEYS:
+    # Camera set depends on the mode too: cam_high is always present, plus one or
+    # both wrist cameras. Require cam_high + at least one wrist cam.
+    camera_keys = _camera_keys_from_features(features)
+    if "cam_high" not in camera_keys:
+        raise ValueError(f"Missing required camera 'cam_high'; found {camera_keys}")
+    if not any(cam in camera_keys for cam in WRIST_CAMERA_KEYS):
+        raise ValueError(f"Expected at least one wrist camera {WRIST_CAMERA_KEYS}; found {camera_keys}")
+    for cam_key in camera_keys:
         video_key = f"observation.images.{cam_key}"
-        if video_key not in features:
-            raise ValueError(f"Missing video feature {video_key!r}")
         shape = features[video_key].get("shape", [])
         if shape != [480, 640, 3]:
             raise ValueError(f"{video_key} shape must be [480, 640, 3], got {shape}")
 
     print(
         f"[OK] info.json: robot_type={info['robot_type']}, "
+        f"state_dim={state_shape}, cameras={camera_keys}, "
         f"episodes={info.get('total_episodes')}, frames={info.get('total_frames')}, fps={info.get('fps')}"
     )
     return info
@@ -120,7 +150,8 @@ def _check_videos(root: Path, info: dict) -> None:
     total_frames = info.get("total_frames", 0)
     mid_frame = max(0, total_frames // 2)
 
-    for cam_key in CAMERA_KEYS:
+    camera_keys = _camera_keys_from_features(info.get("features", {}))
+    for cam_key in camera_keys:
         video_key = f"observation.images.{cam_key}"
         rel_path = video_path_tpl.format(video_key=video_key, chunk_index=0, file_index=0)
         path = root / rel_path
