@@ -189,6 +189,24 @@ def add_vr_teleop_args(parser: argparse.ArgumentParser) -> None:
             "maps differently. Tune live without code edits."
         ),
     )
+    parser.add_argument(
+        "--pose_smoothing",
+        type=float,
+        default=0.5,
+        metavar="ALPHA",
+        help=(
+            "Exponential low-pass strength applied to the IK target pose each frame. "
+            "ALPHA is the weight of the PREVIOUS filtered pose (0 = raw passthrough, "
+            "1 = frozen/no movement). Concretely: at 60 Hz an ALPHA of 0.5 retains "
+            "50%% of last frame's pose, giving ~1–2 frame lag while significantly "
+            "reducing Quest hand-tracking jitter (especially wrist orientation noise). "
+            "Position is lerped; orientation is slerped (quat_slerp) so the blending "
+            "is geometrically correct. The filter is reset on re-anchor, arm switch, "
+            "and environment reset so it never lags across pose discontinuities. "
+            "Tune down toward 0.2 for more responsiveness, up toward 0.7 for more "
+            "stability. Set 0.0 to disable entirely. Default: 0.5."
+        ),
+    )
 
 
 def add_vr_camera_args(parser: argparse.ArgumentParser) -> None:

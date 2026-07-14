@@ -394,6 +394,58 @@ For the staged XR camera-compatibility experiment, run the teleop script with ca
 
 This prints periodic probe status and writes a JSON report summarizing whether `cam_high`, `cam_left_wrist`, and `cam_right_wrist` remained readable during the XR session.
 
+#### Multi-session data collection
+
+LeRobot v3 closes its parquet writers permanently when `finalize()` is called (on Ctrl+C or normal exit), so an existing dataset folder cannot be reopened for appending. The supported approach is a **shard-then-merge** workflow:
+
+1. Each call to `run_collect_dataset.sh` writes its own shard into a timestamped subdirectory:
+
+   ```
+   $ROOT_BASE/shards/session_20260714_093000/   ← session 1
+   $ROOT_BASE/shards/session_20260714_150000/   ← session 2
+   ...
+   ```
+
+   You can also supply an explicit label: `./scripts/imitation_learning/run_collect_dataset.sh morning`.
+
+2. After all sessions are complete, merge the shards:
+
+   ```bash
+   ./scripts/imitation_learning/run_merge_dataset.sh          # merge only
+   ./scripts/imitation_learning/run_merge_dataset.sh --verify # merge + verify_dataset
+   ```
+
+   The merge script calls `lerobot.datasets.aggregate.aggregate_datasets`, which validates that all shards share the same fps, robot_type, and feature schema, then writes the final dataset to `$ROOT_BASE/merged/`.
+
+3. All shards **must** share the same `--record_arm` mode and `--fps`; the merge step raises an error if they differ.
+
+#### Debug visualization in recordings
+
+Debug markers (green keypoint spheres at the tracked wrist/thumb/index, and RGB axis lines at the IK EE goal) are automatically suppressed when recording is active. They remain enabled in pure teleoperation mode (`teleop_dual_arm_vr.py`) to aid debugging. The `--no_hand_markers` flag can still be used to suppress them during teleoperation.
+
+#### Movement smoothing (`--pose_smoothing`)
+
+Quest 3 hand-tracking introduces per-frame jitter in both position and orientation (especially wrist tilt). The `--pose_smoothing` flag applies an exponential low-pass filter to the IK target pose:
+
+```bash
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
+  --repo_id YourUser/my_dataset \
+  --root /tmp/my_dataset \
+  --record_arm right \
+  --pose_smoothing 0.5      # default
+```
+
+`--pose_smoothing ALPHA` (default `0.5`): weight of the **previous** filtered pose retained each frame. `0` = raw passthrough, higher = smoother but laggier. Position is blended linearly; orientation is blended via quaternion SLERP so the interpolation is geometrically correct. The filter resets on re-anchor (`B`), arm switch (`TAB`), and environment reset so it never lags across pose discontinuities.
+
+| ALPHA | Behaviour |
+|-------|-----------|
+| 0.0 | Raw passthrough — maximum responsiveness, maximum jitter |
+| 0.3 | Light smoothing — subtle jitter reduction, minimal lag |
+| 0.5 | **Default** — balanced for most operators |
+| 0.7 | Strong smoothing — very stable, noticeable lag on fast moves |
+
+Both `record_dual_arm_vr.py` and `teleop_dual_arm_vr.py` accept this flag.
+
 ---
 
 ## 6. Findings and Limitations

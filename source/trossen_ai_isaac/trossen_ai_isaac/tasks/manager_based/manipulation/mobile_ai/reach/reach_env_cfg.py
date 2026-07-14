@@ -247,8 +247,8 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("cube"),
             "pose_range": {
-                "x": (-0.10, 0.0),
-                "y": (-0.20, 0.20),
+                "x": (-0.10, 0.05),
+                "y": (-0.20, 0.0),
                 "z": (0.0, 0.0),
             },
             "velocity_range": {},
@@ -298,7 +298,7 @@ class MobileAIReachEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         self.decimation = 2
         self.sim.render_interval = self.decimation
-        self.episode_length_s = 12.0
+        self.episode_length_s = 30.0
         self.viewer.eye = (3.5, 3.5, 3.5)
         self.sim.dt = 1.0 / 60.0
 

@@ -282,6 +282,7 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 | Dataset smoke | `scripts/imitation_learning/smoke/smoke_record_dataset.py` | Isaac Sim |
 | Record demos (keyboard/gamepad) | `scripts/imitation_learning/recording/record_dual_arm.py` | Isaac Sim + LeRobot |
 | Record demos (VR) | `scripts/imitation_learning/recording/record_dual_arm_vr.py` | Isaac Sim + LeRobot + VR stack |
+| Merge VR shards (multi-session) | `scripts/imitation_learning/recording/merge_datasets.py` | LeRobot venv |
 | Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
 | Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
 
@@ -299,22 +300,31 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 #   left / right     => 7D that-arm joints + cam_high + that arm's wrist camera,
 #                       teleop locked to that arm (TAB disabled). Still a valid
 #                       LeRobot v3 dataset, just fewer feature dims/cameras.
+# --pose_smoothing (default 0.5): exponential low-pass on IK target pose to reduce
+#   Quest hand-tracking jitter. 0=raw, 0.5=balanced, 0.7=very stable/more lag.
+# Each call writes a self-contained shard; merge shards after all sessions (see below).
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
     --repo_id USER/dataset_name \
-    --root ~/lerobot_trossen/datasets/dataset_name \
+    --root ~/lerobot_trossen/datasets/my_dataset/shards/session_1 \
     --record_arm right \
     --fps 60
 
+# Merge shards from multiple sessions into one LeRobot v3 dataset
+~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/recording/merge_datasets.py \
+    --shards_dir ~/lerobot_trossen/datasets/my_dataset/shards \
+    --repo_id USER/dataset_name \
+    --root ~/lerobot_trossen/datasets/my_dataset/merged
+
 # Verify offline
 ~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/validation/verify_dataset.py \
-    --root ~/lerobot_trossen/datasets/dataset_name
+    --root ~/lerobot_trossen/datasets/my_dataset/merged
 
 # Short ACT training smoke (GPU via lerobot_train conda)
 python scripts/imitation_learning/training/smoke_train_act.py \
-    --root ~/lerobot_trossen/datasets/dataset_name
+    --root ~/lerobot_trossen/datasets/my_dataset/merged
 ```
 
-See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup.
+See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details.
 
 ### Leader Arm Teleoperation
 
