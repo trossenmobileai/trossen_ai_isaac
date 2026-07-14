@@ -1,0 +1,60 @@
+# Copyright 2026 Trossen Robotics
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice,
+#   this list of conditions and the following disclaimer.
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+# * Neither the name of the copyright holder nor the names of its contributors
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Absolute-IK lift environment for Mobile AI teleoperation and recording."""
+
+from isaaclab.utils import configclass
+
+from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.ik_abs_env_cfg import (
+    MobileAIReachEnvCfg_IK_ABS,
+)
+
+from .lift_env_cfg import EmptyCommandsCfg, LiftObservationsCfg, LiftRewardsCfg, LiftTerminationsCfg
+
+
+@configclass
+class MobileAILiftEnvCfg_IK_ABS(MobileAIReachEnvCfg_IK_ABS):
+    """Lift task with absolute IK teleoperation and pick-lift-place metrics."""
+
+    observations: LiftObservationsCfg = LiftObservationsCfg()
+    commands: EmptyCommandsCfg = EmptyCommandsCfg()
+    rewards: LiftRewardsCfg = LiftRewardsCfg()
+    terminations: LiftTerminationsCfg = LiftTerminationsCfg()
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.episode_length_s = 30.0
+
+
+@configclass
+class MobileAILiftEnvCfg_IK_ABS_PLAY(MobileAILiftEnvCfg_IK_ABS):
+    """Play variant for lift teleoperation."""
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.scene.env_spacing = 2.5
+        self.observations.policy.enable_corruption = False

@@ -26,8 +26,9 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Training smoke-test helpers."""
+"""Training helpers."""
 
 from trossen_ai_isaac.training.smoke_act import run_smoke_act
+from trossen_ai_isaac.training.train_act import run_train_act
 
-__all__ = ["run_smoke_act"]
+__all__ = ["run_smoke_act", "run_train_act"]

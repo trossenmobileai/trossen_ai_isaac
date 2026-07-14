@@ -26,7 +26,6 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Mobile AI manipulation task environments."""
+"""Mobile AI pick-lift-place task environments."""
 
-from .lift import *  # noqa: F401, F403
-from .reach import *  # noqa: F401, F403
+from .config import *  # noqa: F401, F403

@@ -26,7 +26,9 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Mobile AI manipulation task environments."""
+"""ACT policy evaluation helpers."""
 
-from .lift import *  # noqa: F401, F403
-from .reach import *  # noqa: F401, F403
+from trossen_ai_isaac.evaluation.act_rollout import run_act_rollout
+from trossen_ai_isaac.evaluation.policy_client import PolicySidecarClient
+
+__all__ = ["PolicySidecarClient", "run_act_rollout"]

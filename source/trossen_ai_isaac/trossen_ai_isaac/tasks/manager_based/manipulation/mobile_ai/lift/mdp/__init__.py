@@ -26,7 +26,10 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Mobile AI manipulation task environments."""
+"""MDP helpers for the Mobile AI lift task."""
 
-from .lift import *  # noqa: F401, F403
-from .reach import *  # noqa: F401, F403
+from isaaclab.envs.mdp import *  # noqa: F401, F403
+
+from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import *  # noqa: F401, F403
+
+from .metrics import *  # noqa: F401, F403
