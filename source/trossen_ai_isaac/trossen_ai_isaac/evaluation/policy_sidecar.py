@@ -43,10 +43,12 @@ from typing import Any
 import numpy as np
 import torch
 
+from policy_transport import pack_message, unpack_message
+
 
 def _send_msg(conn: socket.socket, payload: dict[str, Any]) -> None:
     try:
-        data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+        data = pickle.dumps(pack_message(payload), protocol=pickle.HIGHEST_PROTOCOL)
         conn.sendall(struct.pack("!I", len(data)))
         conn.sendall(data)
     except (BrokenPipeError, ConnectionResetError) as exc:
@@ -57,7 +59,7 @@ def _recv_msg(conn: socket.socket) -> dict[str, Any]:
     header = _recvall(conn, 4)
     (length,) = struct.unpack("!I", header)
     data = _recvall(conn, length)
-    return pickle.loads(data)
+    return unpack_message(pickle.loads(data))
 
 
 def _recvall(conn: socket.socket, nbytes: int) -> bytes:
@@ -76,9 +78,12 @@ def _to_tensor(array: np.ndarray, device: torch.device) -> torch.Tensor:
     tensor = torch.as_tensor(array)
     if tensor.ndim == 1:
         tensor = tensor.unsqueeze(0)
+    elif tensor.ndim == 3 and tensor.shape[-1] in (3, 4):
+        # Sim capture is HWC uint8; ACT expects NCHW float in [0, 1].
+        tensor = tensor.unsqueeze(0).permute(0, 3, 1, 2)
     if tensor.dtype == torch.uint8:
         tensor = tensor.float() / 255.0
-    if tensor.ndim == 4 and tensor.shape[-1] in (3, 4):
+    elif tensor.ndim == 4 and tensor.shape[-1] in (3, 4):
         tensor = tensor.permute(0, 3, 1, 2)
     return tensor.to(device)
 

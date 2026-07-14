@@ -128,8 +128,20 @@ def warn_action_dim_mismatch(env, expected: int = ACTION_DIM) -> None:
         )
 
 
-def make_env_cfg(task: str, device: str, num_envs: int, fps: int | None = None):
-    """Parse env cfg, disable timeout, and optionally set decimation from fps."""
+def make_env_cfg(
+    task: str,
+    device: str,
+    num_envs: int,
+    fps: int | None = None,
+    *,
+    enable_timeout: bool = False,
+):
+    """Parse env cfg and optionally set decimation from fps.
+
+    Teleop/recording disables the episode timeout so the operator ends episodes
+    manually.  Closed-loop policy rollout should pass ``enable_timeout=True`` so
+    each episode ends after ``episode_length_s`` (typically 30 s).
+    """
     env_cfg = parse_env_cfg(task, device=device, num_envs=num_envs)
     env_cfg.env_name = task
     # Recording tasks must keep the three camera sensors enabled.
@@ -140,7 +152,8 @@ def make_env_cfg(task: str, device: str, num_envs: int, fps: int | None = None):
             missing = [name for name in expected_cams if not hasattr(scene_cfg, name)]
             if missing:
                 logger.warning("Env cfg is missing expected camera configs: %s", missing)
-    env_cfg.terminations.time_out = None
+    if not enable_timeout:
+        env_cfg.terminations.time_out = None
 
     if fps is not None:
         decimation = max(1, round(SIM_HZ / fps))

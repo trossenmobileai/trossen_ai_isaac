@@ -79,6 +79,11 @@ echo "============================================================"
 
 cd "$REPO_DIR"
 
+# isaaclab.sh calls `tabs`; TERM=dumb (common in CI/automation) makes that fail.
+if [ "${TERM:-}" = "dumb" ] || [ -z "${TERM:-}" ]; then
+  export TERM=xterm
+fi
+
 PLAY_ARGS=(
   --policy.path "$CHECKPOINT_DIR"
   --num_episodes "$NUM_EPISODES"

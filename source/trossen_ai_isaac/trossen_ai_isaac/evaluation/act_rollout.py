@@ -184,7 +184,9 @@ def run_act_rollout(
     try:
         _connect_sidecar(client, sidecar_proc, sidecar_host, sidecar_port)
 
-        env_cfg = make_env_cfg(task, device=device, num_envs=num_envs, fps=fps)
+        env_cfg = make_env_cfg(
+            task, device=device, num_envs=num_envs, fps=fps, enable_timeout=True
+        )
         env = gym.make(task, cfg=env_cfg).unwrapped
 
         try:

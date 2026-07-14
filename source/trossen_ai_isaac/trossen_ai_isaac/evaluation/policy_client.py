@@ -38,9 +38,11 @@ from typing import Any
 
 import numpy as np
 
+from trossen_ai_isaac.evaluation.policy_transport import pack_message, unpack_message
+
 
 def _send_msg(sock: socket.socket, payload: dict[str, Any]) -> None:
-    data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+    data = pickle.dumps(pack_message(payload), protocol=pickle.HIGHEST_PROTOCOL)
     sock.sendall(struct.pack("!I", len(data)))
     sock.sendall(data)
 
@@ -51,7 +53,7 @@ def _recv_msg(sock: socket.socket) -> dict[str, Any]:
         raise ConnectionError("Policy sidecar closed the connection")
     (length,) = struct.unpack("!I", header)
     data = _recvall(sock, length)
-    return pickle.loads(data)
+    return unpack_message(pickle.loads(data))
 
 
 def _recvall(sock: socket.socket, nbytes: int) -> bytes:

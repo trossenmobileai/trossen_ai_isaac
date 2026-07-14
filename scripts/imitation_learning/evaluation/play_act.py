@@ -49,7 +49,7 @@ parser.add_argument(
 )
 parser.add_argument("--policy.path", dest="policy_path", type=str, required=True, help="Checkpoint directory.")
 parser.add_argument("--num_episodes", type=int, default=10, help="Number of evaluation episodes.")
-parser.add_argument("--fps", type=int, default=30, help="Environment control rate.")
+parser.add_argument("--fps", type=int, default=60, help="Environment control rate.")
 parser.add_argument(
     "--task_description",
     type=str,

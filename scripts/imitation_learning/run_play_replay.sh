@@ -47,6 +47,10 @@ echo "============================================================"
 
 cd "$REPO_DIR"
 
+if [ "${TERM:-}" = "dumb" ] || [ -z "${TERM:-}" ]; then
+  export TERM=xterm
+fi
+
 REPLAY_ARGS=(
   --root "$DATASET_ROOT"
   --episode "$EPISODE"
