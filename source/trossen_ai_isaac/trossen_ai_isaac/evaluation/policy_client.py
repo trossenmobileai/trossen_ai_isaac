@@ -125,7 +125,7 @@ def build_sidecar_command(
     """Return argv for launching the policy sidecar subprocess."""
     sidecar = Path(__file__).resolve().parent / "policy_sidecar.py"
     return [
-        str(python_exe),
+        str(Path(python_exe).expanduser()),
         str(sidecar),
         f"--policy.path={Path(policy_path).expanduser()}",
         f"--host={host}",

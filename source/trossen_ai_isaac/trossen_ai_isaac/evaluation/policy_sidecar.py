@@ -45,9 +45,12 @@ import torch
 
 
 def _send_msg(conn: socket.socket, payload: dict[str, Any]) -> None:
-    data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    conn.sendall(struct.pack("!I", len(data)))
-    conn.sendall(data)
+    try:
+        data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+        conn.sendall(struct.pack("!I", len(data)))
+        conn.sendall(data)
+    except (BrokenPipeError, ConnectionResetError) as exc:
+        raise ConnectionError("Client disconnected") from exc
 
 
 def _recv_msg(conn: socket.socket) -> dict[str, Any]:
@@ -80,17 +83,28 @@ def _to_tensor(array: np.ndarray, device: torch.device) -> torch.Tensor:
     return tensor.to(device)
 
 
+def _load_act_policy(policy_path: Path):
+    """Load an ACT checkpoint via the concrete ``ACTPolicy`` class."""
+    errors: list[str] = []
+    for module_name in (
+        "lerobot.policies.act.modeling_act",
+        "lerobot.common.policies.act.modeling_act",
+    ):
+        try:
+            module = __import__(module_name, fromlist=["ACTPolicy"])
+            return module.ACTPolicy.from_pretrained(str(policy_path))
+        except Exception as exc:
+            errors.append(f"{module_name}: {exc}")
+
+    raise RuntimeError(
+        f"Failed to load ACT policy from {policy_path}. Tried:\n  " + "\n  ".join(errors)
+    )
+
+
 class ACTSidecar:
     def __init__(self, policy_path: Path, device: str) -> None:
         self.device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
-        try:
-            from lerobot.policies.pretrained import PreTrainedPolicy
-
-            self.policy = PreTrainedPolicy.from_pretrained(str(policy_path))
-        except ImportError:
-            from lerobot.policies.factory import make_policy
-
-            self.policy = make_policy(cfg=None, pretrained_path=str(policy_path))
+        self.policy = _load_act_policy(policy_path)
         self.policy.to(self.device)
         self.policy.eval()
         self._queue: deque[np.ndarray] = deque()
@@ -143,7 +157,10 @@ def main() -> int:
             request = _recv_msg(conn)
             cmd = request.get("cmd")
             if cmd == "shutdown":
-                _send_msg(conn, {"ok": True})
+                try:
+                    _send_msg(conn, {"ok": True})
+                except ConnectionError:
+                    pass
                 break
             if cmd == "reset":
                 sidecar.reset()
@@ -154,6 +171,8 @@ def main() -> int:
                 _send_msg(conn, {"ok": True, "action": action})
                 continue
             _send_msg(conn, {"ok": False, "error": f"Unknown command: {cmd!r}"})
+    except ConnectionError:
+        pass
     finally:
         conn.close()
         server.close()

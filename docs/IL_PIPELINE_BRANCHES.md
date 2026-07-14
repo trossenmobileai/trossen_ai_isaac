@@ -9,13 +9,14 @@
 | Path | Role |
 |------|------|
 | `scripts/teleoperation/` | Runnable teleop CLIs (`isaaclab.sh -p`) |
-| `scripts/imitation_learning/` | Recording, dataset QA, training smoke |
+| `scripts/imitation_learning/` | Recording, validation, training, **ACT evaluation** | `isaaclab.sh -p` or plain Python |
 | `scripts/demos/` | Standalone Isaac Sim demos (`isaacsim/python.sh`) |
 | `scripts/lib/` | Shared helpers for demos (`controller.py`, `leader_arm.py`) |
 | `source/trossen_ai_isaac/trossen_ai_isaac/teleop/` | Teleop **library** (loops, session, VR) |
 | `source/trossen_ai_isaac/trossen_ai_isaac/recording/` | LeRobot writer, frame capture, smokes |
 | `source/trossen_ai_isaac/trossen_ai_isaac/validation/` | Offline dataset checks |
 | `source/trossen_ai_isaac/trossen_ai_isaac/training/` | Training smoke helpers |
+| `source/trossen_ai_isaac/trossen_ai_isaac/evaluation/` | ACT rollout, policy sidecar |
 
 ## Branch history
 
@@ -42,14 +43,41 @@ This branch is **superseded by `feat/il-record-phase2`**. Do not merge it.
 | Recording bug | **Double `env.step()`** per frame | Single step + `recorder.on_step()` |
 | Training | None (despite branch name) | N/A — training smoke in `lerobot_train` conda env |
 
-## Remaining work (not yet in repo)
+## Remaining work
 
 | Area | Work | Notes |
 |------|------|-------|
-| Sim policy evaluation | Load ACT checkpoint and roll out in `Isaac-Reach-MobileAI-Record-Play-v0` | No `play_act.py` equivalent yet |
-| Full ACT training | Production `lerobot-train` runs on sim datasets | Smoke only in-repo; full training in `lerobot_train` conda env |
-| Sim-to-real | Deploy trained policies on physical Mobile AI | Parallel track outside this repository |
+| Full ACT training in-repo wrapper | Production `lerobot-train` helper script | [`run_verify_and_train.sh`](../scripts/imitation_learning/run_verify_and_train.sh) exists; smoke in-repo |
+| Sim-to-real | Deploy trained policies on physical Mobile AI | Parallel track; see [Trossen real-robot eval docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html) |
 | Large-scale VR collection | Headset-on-workstation validation and bulk VR demos | Entrypoint exists; hardware validation pending |
+| Eval dataset recording in sim | Save `eval_*` LeRobot datasets during rollout | Metrics-only eval implemented; optional future work |
+
+## Evaluation quick reference
+
+Sim equivalent of real-robot `lerobot-record --policy.path=<checkpoint>`:
+
+```bash
+# Preflight: verify checkpoint loads
+conda run -n lerobot_train python -c "
+from lerobot.policies.act.modeling_act import ACTPolicy
+ACTPolicy.from_pretrained('~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model')
+print('OK')
+"
+
+# Open-loop replay (sanity check before policy rollout)
+./scripts/imitation_learning/run_play_replay.sh \
+  ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2 0
+
+# Closed-loop ACT rollout (writes ~/trossen_ai_isaac/outputs/eval/rollout_summary.json)
+./scripts/imitation_learning/run_play_act.sh
+
+# Visual mode: add --visual anywhere
+./scripts/imitation_learning/run_play_act.sh \
+  ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
+  1 --visual
+```
+
+See [Epic 3 §4.8](EPIC3_SIMULATION_TRAINING_PIPELINE.md#48-sim-act-evaluation) for architecture and troubleshooting.
 
 ## Recording quick reference
 

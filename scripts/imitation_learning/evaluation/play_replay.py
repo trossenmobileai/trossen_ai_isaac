@@ -65,13 +65,49 @@ from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.obser
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg  # noqa: E402
 
 
-def _load_dataset(root: str, repo_id: str | None):
+def _load_episode_from_parquet(root: str, episode: int) -> list[np.ndarray]:
+    """Load ordered action vectors for one episode directly from parquet files."""
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise ImportError(
+            "LeRobot is not installed in the Isaac Sim Python env and PyArrow is "
+            "unavailable for parquet fallback."
+        ) from exc
+
+    frames: list[tuple[int, np.ndarray]] = []
+    data_dir = Path(root) / "data"
+    for path in sorted(data_dir.rglob("*.parquet")):
+        pf = pq.ParquetFile(path)
+        for batch in pf.iter_batches(columns=["action", "episode_index", "frame_index"]):
+            for epi, frame_idx, action in zip(
+                batch.column("episode_index").to_pylist(),
+                batch.column("frame_index").to_pylist(),
+                batch.column("action").to_pylist(),
+            ):
+                if epi == episode:
+                    frames.append((frame_idx, np.asarray(action, dtype=np.float32)))
+
+    if not frames:
+        raise ValueError(f"Episode {episode} not found in dataset")
+
+    frames.sort(key=lambda item: item[0])
+    return [action for _, action in frames]
+
+
+def _load_episode_actions(root: str, repo_id: str | None, episode: int) -> list[np.ndarray]:
+    """Load action sequence for one episode (LeRobot API with parquet fallback)."""
     try:
         from lerobot.datasets.lerobot_dataset import LeRobotDataset
-    except ImportError as exc:
-        raise ImportError("LeRobot is required for replay. Use ~/lerobot_trossen/.venv/bin/python.") from exc
+    except ImportError:
+        return _load_episode_from_parquet(root, episode)
+
     ds_repo = repo_id or Path(root).name
-    return LeRobotDataset(ds_repo, root=root)
+    dataset = LeRobotDataset(ds_repo, root=root)
+    episode_data = dataset.hf_dataset.filter(lambda x: x["episode_index"] == episode)
+    if len(episode_data) == 0:
+        raise ValueError(f"Episode {episode} not found in dataset")
+    return [np.asarray(row["action"], dtype=np.float32) for row in episode_data]
 
 
 def _detect_action_dim(root: str) -> int:
@@ -108,24 +144,19 @@ def main() -> int:
     print(f"[INFO] Detected action_dim={action_dim} from dataset info.json")
 
     try:
-        dataset = _load_dataset(root, args_cli.repo_id)
-        episode_data = dataset.hf_dataset.filter(lambda x: x["episode_index"] == args_cli.episode)
-        if len(episode_data) == 0:
-            raise ValueError(f"Episode {args_cli.episode} not found in dataset")
+        actions = _load_episode_actions(root, args_cli.repo_id, args_cli.episode)
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        env_cfg = make_env_cfg(args_cli.task, device=device, num_envs=1, fps=args_cli.fps)
+        env_cfg = make_env_cfg(args_cli.task, device=args_cli.device, num_envs=1, fps=args_cli.fps)
         env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
         env.reset()
 
-        for row in episode_data:
-            action = np.asarray(row["action"], dtype=np.float32)
+        for action in actions:
             env_action = _action_to_env(action, env, action_dim)
             env.step(env_action)
             simulation_app.update()
 
         env.close()
-        print(f"[OK] Replayed episode {args_cli.episode} ({len(episode_data)} steps)")
+        print(f"[OK] Replayed episode {args_cli.episode} ({len(actions)} steps)")
         return 0
     except Exception as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)

@@ -7,20 +7,34 @@
 # whether the motion looks correct and the cube is actually picked up.
 #
 # Usage:
-#   ./run_play_replay.sh [DATASET_ROOT] [EPISODE_INDEX]
+#   ./run_play_replay.sh [DATASET_ROOT] [EPISODE_INDEX] [FPS] [--visual]
 #
 # Defaults:
-#   DATASET_ROOT   ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_session1
+#   DATASET_ROOT   ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2
 #   EPISODE_INDEX  0
+#   FPS            60
 # ============================================================================
 
 set -euo pipefail
 
-DATASET_ROOT="${1:-$HOME/lerobot_trossen/datasets/mobile_ai_right_pick_place_session1}"
+DATASET_ROOT="${1:-$HOME/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2}"
 EPISODE="${2:-0}"
+shift 2 2>/dev/null || true
+
+FPS=60
+HEADLESS="--headless"
+for arg in "$@"; do
+  case "$arg" in
+    --visual) HEADLESS="" ;;
+    [0-9]*) FPS="$arg" ;;
+    *)
+      echo "[FAIL] Unknown argument: $arg (expected FPS number or --visual)" >&2
+      exit 1
+      ;;
+  esac
+done
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
-SCRIPT="$REPO_DIR/scripts/imitation_learning/evaluation/play_replay.py"
 
 if [ ! -d "$DATASET_ROOT" ]; then
   echo "[FAIL] Dataset root not found: $DATASET_ROOT" >&2
@@ -28,11 +42,18 @@ if [ ! -d "$DATASET_ROOT" ]; then
 fi
 
 echo "============================================================"
-echo "  Replay episode $EPISODE from $DATASET_ROOT"
+echo "  Replay episode $EPISODE from $DATASET_ROOT (fps=$FPS)"
 echo "============================================================"
 
-~/lerobot_trossen/.venv/bin/python "$SCRIPT" \
-  --root "$DATASET_ROOT" \
-  --episode "$EPISODE" \
-  --fps 30 \
-  --headless
+cd "$REPO_DIR"
+
+REPLAY_ARGS=(
+  --root "$DATASET_ROOT"
+  --episode "$EPISODE"
+  --fps "$FPS"
+)
+if [ -n "$HEADLESS" ]; then
+  REPLAY_ARGS+=("$HEADLESS")
+fi
+
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/evaluation/play_replay.py "${REPLAY_ARGS[@]}"

@@ -60,12 +60,11 @@ parser.add_argument(
     "--sidecar-python",
     type=str,
     default="~/lerobot_trossen/.venv/bin/python",
-    help="Python executable for ACT inference (LeRobot venv).",
+    help="Python executable for ACT inference (prefer lerobot_train conda env).",
 )
 parser.add_argument("--sidecar-host", type=str, default="127.0.0.1")
 parser.add_argument("--sidecar-port", type=int, default=5555)
 parser.add_argument("--output_dir", type=str, default=None, help="Optional directory for rollout_summary.json.")
-parser.add_argument("--device", type=str, default=None, help="Simulation device (cuda/cpu).")
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -97,21 +96,12 @@ def _load_run_act_rollout():
 
 
 def main() -> int:
-    device = args_cli.device
-    if device is None:
-        try:
-            import torch
-
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            device = "cpu"
-
     try:
         run_act_rollout = _load_run_act_rollout()
         run_act_rollout(
             task=args_cli.task,
             policy_path=args_cli.policy_path,
-            device=device,
+            device=args_cli.device,
             num_episodes=args_cli.num_episodes,
             fps=args_cli.fps,
             task_description=args_cli.task_description,

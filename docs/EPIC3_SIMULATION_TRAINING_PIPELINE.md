@@ -17,6 +17,7 @@
   - [4.5 Simulation Scene](#45-simulation-scene)
   - [4.6 Imitation Learning Recording Pipeline](#46-imitation-learning-recording-pipeline)
   - [4.7 Repository and Branch Structure](#47-repository-and-branch-structure)
+  - [4.8 Sim ACT Evaluation](#48-sim-act-evaluation)
 - [5. Operational Procedures](#5-operational-procedures)
 - [6. Findings and Limitations](#6-findings-and-limitations)
 - [7. Troubleshooting](#7-troubleshooting)
@@ -532,6 +533,7 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 | `scripts/demos/` | Standalone Isaac Sim demos | `~/isaacsim/python.sh scripts/demos/...` |
 | `source/.../teleop/` | Teleoperation library | Imported by scripts |
 | `source/.../recording/` | LeRobot writer, frame capture | Imported by IL scripts |
+| `source/.../evaluation/` | ACT rollout, policy sidecar | Imported by `play_act.py` |
 | `source/.../tasks/.../mobile_ai/` | Task environment configs | Registered as gym tasks |
 
 **Branch history** (all integration work is on `main` as of PR #2 and PR #3):
@@ -547,6 +549,40 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 | `feat/sim-training` | Deprecated (HDF5/Robomimic approach) |
 
 Full branch details: [IL_PIPELINE_BRANCHES.md](IL_PIPELINE_BRANCHES.md)
+
+### 4.8 Sim ACT Evaluation
+
+Closed-loop deployment and evaluation of a trained ACT checkpoint in simulation. This is the sim equivalent of real-robot `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)).
+
+**Real robot vs sim**
+
+| Real robot | Simulation (this repo) |
+|------------|------------------------|
+| `lerobot-record --policy.path=...` | [`run_play_act.sh`](../scripts/imitation_learning/run_play_act.sh) |
+| `mobileai_robot` + RealSense | `Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0` |
+| Policy in same process as robot I/O | **Sidecar**: Isaac Sim (Python 3.11) + ACT in `lerobot_train` conda (Python 3.12) |
+| 16D mobileai_robot actions | **7D right-arm** checkpoint when recorded with `--record_arm right` |
+| Operator observes success | Automatic metrics in `~/trossen_ai_isaac/outputs/eval/rollout_summary.json` |
+
+**Architecture**
+
+1. [`play_act.py`](../scripts/imitation_learning/evaluation/play_act.py) launches Isaac Sim with the joint-position lift environment.
+2. [`act_rollout.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) spawns [`policy_sidecar.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/policy_sidecar.py) in `lerobot_train` with a **clean subprocess env** (strips Isaac `PYTHONPATH` to avoid Python version conflicts).
+3. A **single persistent TCP connection** carries `reset` / `infer` requests for the full rollout.
+4. Each step: capture 7D right-arm state + `cam_high` + `cam_right_wrist` → sidecar → 7D action → map to 14D env joint targets (left arm held at reset pose).
+5. After each episode: [`evaluate_episode_metrics`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) records `cube_lifted`, `cube_placed`, `episode_success`.
+
+**Key files**
+
+| File | Role |
+|------|------|
+| `scripts/imitation_learning/run_play_act.sh` | One-command closed-loop eval |
+| `scripts/imitation_learning/run_play_replay.sh` | Open-loop replay sanity check |
+| `source/.../evaluation/act_rollout.py` | Rollout loop + metrics |
+| `source/.../evaluation/policy_sidecar.py` | `ACTPolicy.from_pretrained` inference server |
+| `source/.../lift/joint_pos_env_cfg.py` | Joint-position control env for rollout |
+
+**Prerequisites:** trained checkpoint from `lerobot_train`, same 7D right-arm layout as recording (`cam_high` + `cam_right_wrist`), task string `"Pick up the cube, lift it, and place it back on the table"`.
 
 ---
 
@@ -673,6 +709,51 @@ The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0` and enables cameras
 
 **Expected result:** Dataset files (parquet and MP4) appear under `--root`. Verify with [§5.7](#57-verify-dataset).
 
+### 5.10 Evaluate ACT Policy (Closed-Loop Rollout)
+
+**Purpose:** Deploy a trained ACT checkpoint in simulation and measure pick-lift-place success ([§4.8](#48-sim-act-evaluation)).
+
+**Preflight — verify checkpoint loads:**
+
+```bash
+conda run -n lerobot_train python -c "
+from lerobot.policies.act.modeling_act import ACTPolicy
+ACTPolicy.from_pretrained('~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model')
+print('OK')
+"
+```
+
+**Preflight — open-loop replay (optional):**
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_play_replay.sh \
+  ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2 0
+```
+
+**Closed-loop evaluation:**
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_play_act.sh
+```
+
+With explicit checkpoint, episode count, and FPS (default 60 to match recording):
+
+```bash
+./scripts/imitation_learning/run_play_act.sh \
+  ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
+  10 60
+```
+
+Add `--visual` anywhere to watch in the Isaac Sim GUI instead of headless mode.
+
+**Expected result:**
+
+- Sidecar prints `[OK] ACT sidecar listening on 127.0.0.1:5555`
+- Per-episode lines: `[EP 1/10] success=... lifted=... placed=... steps=...`
+- Summary written to `~/trossen_ai_isaac/outputs/eval/rollout_summary.json`
+
 ---
 
 ## 6. Findings and Limitations
@@ -692,10 +773,10 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 ### 6.3 Current Limitations
 
 - **No Mobile AI RL/PPO** unlike stock WXAI reach, lift, and cabinet tasks
-- **No sim policy evaluation in-repo:** no script to load an ACT checkpoint and roll out in the Record task (WXAI has `play.py` for PPO only)
-- **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment
+- **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment (wrapper: `run_verify_and_train.sh`)
 - **VR recording hardware validation pending:** `record_dual_arm_vr.py` is implemented; headset-on-workstation confirmation of camera quality and XR compatibility is still required ([Epic 4 §6.3](EPIC4_VR_INTEGRATION.md#63-current-limitations))
-- **No task success metrics:** rewards and terminations are placeholders; the Reach scene is an IL recording sandbox without automated success criteria
+- **Sim eval is metrics-only:** closed-loop rollout reports success metrics; it does not write an `eval_*` LeRobot dataset like optional real-robot recording
+- **Reach task has no automated success metrics:** the Reach *recording* scene is an IL sandbox; the separate *Lift* joint-position env used for ACT rollout does have lift/place metrics
 
 ---
 
@@ -709,6 +790,10 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 | `ImportError: lerobot` during recording | LeRobot not in Isaac Sim Python | Install via `isaaclab.sh -p -m pip install lerobot==0.4.4` |
 | Verify script fails | Wrong Python interpreter | Use `~/lerobot_trossen/.venv/bin/python` |
 | Dataset incomplete after Ctrl+C | Interrupt before finalize | Wait for "dataset finalized" log; script handles SIGINT |
+| `SRE module mismatch` in sidecar | Sidecar inherited Isaac `PYTHONPATH` | Fixed: sidecar subprocess uses clean env ([§4.8](#48-sim-act-evaluation)) |
+| `BrokenPipeError` / connection reset during eval | Probe connection closed sidecar session | Fixed: single persistent TCP connect in `act_rollout.py` |
+| `PreTrainedPolicy` abstract class error | Wrong policy loader in sidecar | Use `ACTPolicy.from_pretrained` via current `policy_sidecar.py` |
+| Eval policy moves wrong arm | Checkpoint not 7D right-arm | Record/retrain with `--record_arm right` |
 
 ### Simulation and physics issues
 
@@ -732,11 +817,12 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 - [x] [LeRobot recording pipeline](#46-imitation-learning-recording-pipeline) (keyboard/gamepad)
 - [x] [VR + LeRobot recording](#59-recording--vr-demonstrations) → [Epic 4](EPIC4_VR_INTEGRATION.md)
 - [x] [Dataset validation and ACT training smoke](#57-verify-dataset)
+- [x] Sim ACT policy evaluation (closed-loop rollout + metrics) → [§4.8](#48-sim-act-evaluation)
 
 ### Planned or in progress
 
-- [ ] Sim policy evaluation (ACT rollout in simulation)
-- [ ] Full policy training workflow and sim-to-real deployment
+- [ ] Full policy training workflow documentation in-repo (wrapper exists: `run_verify_and_train.sh`)
+- [ ] Sim-to-real deployment on physical Mobile AI
 - [ ] Mobile AI reinforcement learning tasks
 - [ ] Task success metrics and manipulation goals beyond the recording sandbox
 

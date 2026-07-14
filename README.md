@@ -284,7 +284,10 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 | Record demos (VR) | `scripts/imitation_learning/recording/record_dual_arm_vr.py` | Isaac Sim + LeRobot + VR stack |
 | Merge VR shards (multi-session) | `scripts/imitation_learning/recording/merge_datasets.py` | LeRobot venv |
 | Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
+| Train ACT | `scripts/imitation_learning/run_verify_and_train.sh` | `lerobot_train` conda |
 | Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
+| Replay episode (open-loop) | `scripts/imitation_learning/run_play_replay.sh` | Isaac Sim |
+| Evaluate ACT policy | `scripts/imitation_learning/run_play_act.sh` | Isaac Sim + `lerobot_train` conda |
 
 ```bash
 # Record demonstrations — keyboard/gamepad (N=toggle episode, M=discard, R=reset)
@@ -322,9 +325,28 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 # Short ACT training smoke (GPU via lerobot_train conda)
 python scripts/imitation_learning/training/smoke_train_act.py \
     --root ~/lerobot_trossen/datasets/my_dataset/merged
+
+# Full ACT training + verify (see scripts/imitation_learning/run_verify_and_train.sh)
+./scripts/imitation_learning/run_verify_and_train.sh
+
+# Phase A — open-loop replay sanity check (episode 0, 60 fps)
+./scripts/imitation_learning/run_play_replay.sh \
+    ~/lerobot_trossen/datasets/my_dataset/merged 0
+
+# Phase B — closed-loop ACT evaluation (10 episodes, metrics in rollout_summary.json)
+./scripts/imitation_learning/run_play_act.sh \
+    ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
+    10 60
+
+# Visual rollout (omit headless)
+./scripts/imitation_learning/run_play_act.sh \
+    ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
+    1 --visual
 ```
 
-See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details.
+Real-robot equivalent: `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)). Sim uses a sidecar process for ACT inference because Isaac Sim and LeRobot run on different Python versions.
+
+See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details. See [docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) §4.8 for sim ACT evaluation architecture and troubleshooting.
 
 ### Leader Arm Teleoperation
 

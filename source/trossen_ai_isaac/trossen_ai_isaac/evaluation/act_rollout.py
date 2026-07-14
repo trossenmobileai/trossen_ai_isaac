@@ -38,6 +38,7 @@ position it has after the env reset (it is not moved).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -96,19 +97,51 @@ def _policy_action_to_env(action_7d: np.ndarray, env) -> torch.Tensor:
     return torch.as_tensor(full_action, device=env.device, dtype=torch.float32).unsqueeze(0)
 
 
-def _wait_for_sidecar(proc: subprocess.Popen, host: str, port: int, timeout_s: float = 120.0) -> None:
+# Isaac Sim sets PYTHONPATH/PYTHONHOME for its bundled Python 3.11.  If the
+# sidecar subprocess inherits those, a conda Python 3.12 hits stdlib from 3.11
+# and crashes with "SRE module mismatch".
+_SIDECAR_ENV_STRIP = (
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTHONNOUSERSITE",
+    "CARB_APP_PATH",
+    "EXP_PATH",
+    "ISAAC_PATH",
+    "OMNI_USER",
+    "OMNI_SERVER",
+)
+
+
+def _sidecar_subprocess_env() -> dict[str, str]:
+    """Return a copy of os.environ with Isaac Sim Python paths removed."""
+    env = os.environ.copy()
+    for key in _SIDECAR_ENV_STRIP:
+        env.pop(key, None)
+    return env
+
+
+def _connect_sidecar(
+    client: PolicySidecarClient,
+    proc: subprocess.Popen,
+    host: str,
+    port: int,
+    timeout_s: float = 120.0,
+) -> None:
+    """Connect to the sidecar once it is listening.
+
+    Uses the rollout client directly so the sidecar's single accepted
+    connection is not consumed by a probe that sends shutdown.
+    """
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         if proc.poll() is not None:
             raise RuntimeError(f"Policy sidecar exited early with code {proc.returncode}")
         try:
-            client = PolicySidecarClient(host=host, port=port, timeout_s=2.0)
             client.connect()
-            client.close()
             return
         except OSError:
             time.sleep(0.25)
-    raise TimeoutError("Timed out waiting for policy sidecar to accept connections")
+    raise TimeoutError("Timed out waiting for policy sidecar")
 
 
 def run_act_rollout(
@@ -144,13 +177,12 @@ def run_act_rollout(
         port=sidecar_port,
         device=device,
     )
-    sidecar_proc = subprocess.Popen(sidecar_cmd)
+    sidecar_proc = subprocess.Popen(sidecar_cmd, env=_sidecar_subprocess_env())
     client = PolicySidecarClient(host=sidecar_host, port=sidecar_port)
     results: list[dict] = []
 
     try:
-        _wait_for_sidecar(sidecar_proc, sidecar_host, sidecar_port)
-        client.connect()
+        _connect_sidecar(client, sidecar_proc, sidecar_host, sidecar_port)
 
         env_cfg = make_env_cfg(task, device=device, num_envs=num_envs, fps=fps)
         env = gym.make(task, cfg=env_cfg).unwrapped
