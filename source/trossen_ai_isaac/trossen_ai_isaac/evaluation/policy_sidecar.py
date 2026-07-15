@@ -36,7 +36,6 @@ import pickle
 import socket
 import struct
 import sys
-from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -74,18 +73,30 @@ def _recvall(conn: socket.socket, nbytes: int) -> bytes:
     return b"".join(chunks)
 
 
-def _to_tensor(array: np.ndarray, device: torch.device) -> torch.Tensor:
-    tensor = torch.as_tensor(array)
-    if tensor.ndim == 1:
-        tensor = tensor.unsqueeze(0)
-    elif tensor.ndim == 3 and tensor.shape[-1] in (3, 4):
-        # Sim capture is HWC uint8; ACT expects NCHW float in [0, 1].
-        tensor = tensor.unsqueeze(0).permute(0, 3, 1, 2)
+def _image_to_chw_float(image: np.ndarray) -> torch.Tensor:
+    """Convert sim capture (HWC uint8) to LeRobot training layout (CHW float32 in [0, 1])."""
+    arr = np.asarray(image)
+    if arr.shape[-1] in (3, 4):
+        arr = arr[..., :3]
+        tensor = torch.from_numpy(arr).permute(2, 0, 1).contiguous()
+    else:
+        tensor = torch.from_numpy(arr).contiguous()
     if tensor.dtype == torch.uint8:
-        tensor = tensor.float() / 255.0
-    elif tensor.ndim == 4 and tensor.shape[-1] in (3, 4):
-        tensor = tensor.permute(0, 3, 1, 2)
-    return tensor.to(device)
+        tensor = tensor.float().div(255.0)
+    else:
+        tensor = tensor.float()
+    return tensor
+
+
+def _observation_to_batch(observation: dict[str, np.ndarray], task: str) -> dict[str, Any]:
+    """Build a LeRobot batch dict from raw sim observations."""
+    batch: dict[str, Any] = {"task": [task]}
+    for key, value in observation.items():
+        if key.startswith("observation.images."):
+            batch[key] = _image_to_chw_float(value)
+        else:
+            batch[key] = torch.as_tensor(value, dtype=torch.float32)
+    return batch
 
 
 def _load_act_policy(policy_path: Path):
@@ -108,32 +119,33 @@ def _load_act_policy(policy_path: Path):
 
 class ACTSidecar:
     def __init__(self, policy_path: Path, device: str) -> None:
+        from lerobot.policies import make_pre_post_processors
+
         self.device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
+        self.policy_path = policy_path
         self.policy = _load_act_policy(policy_path)
         self.policy.to(self.device)
         self.policy.eval()
-        self._queue: deque[np.ndarray] = deque()
+
+        device_override = {"device": str(self.device)}
+        self.preprocessor, self.postprocessor = make_pre_post_processors(
+            self.policy.config,
+            pretrained_path=str(policy_path),
+            preprocessor_overrides={"device_processor": device_override},
+            postprocessor_overrides={"device_processor": {"device": "cpu"}},
+        )
 
     def reset(self) -> None:
-        self._queue.clear()
         if hasattr(self.policy, "reset"):
             self.policy.reset()
 
     def infer(self, observation: dict[str, np.ndarray], task: str) -> np.ndarray:
-        if not self._queue:
-            batch: dict[str, torch.Tensor | list[str]] = {}
-            for key, value in observation.items():
-                batch[key] = _to_tensor(value, self.device)
-            batch["task"] = [task]
-            with torch.inference_mode():
-                action = self.policy.select_action(batch)
-            action_np = action.squeeze(0).detach().cpu().numpy().astype(np.float32)
-            if action_np.ndim == 1:
-                self._queue.append(action_np)
-            else:
-                for step_action in action_np:
-                    self._queue.append(np.asarray(step_action, dtype=np.float32))
-        return self._queue.popleft()
+        batch = _observation_to_batch(observation, task)
+        batch = self.preprocessor(batch)
+        with torch.inference_mode():
+            action = self.policy.select_action(batch)
+        action = self.postprocessor(action)
+        return action.squeeze(0).detach().cpu().numpy().astype(np.float32)
 
 
 def main() -> int:
