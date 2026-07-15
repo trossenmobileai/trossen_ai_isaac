@@ -570,7 +570,30 @@ Closed-loop deployment and evaluation of a trained ACT checkpoint in simulation.
 2. [`act_rollout.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) spawns [`policy_sidecar.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/policy_sidecar.py) in `lerobot_train` with a **clean subprocess env** (strips Isaac `PYTHONPATH` to avoid Python version conflicts).
 3. A **single persistent TCP connection** carries `reset` / `infer` requests for the full rollout.
 4. Each step: capture 7D right-arm state + `cam_high` + `cam_right_wrist` → sidecar → 7D action → map to 14D env joint targets (left arm held at reset pose).
-5. After each episode: [`evaluate_episode_metrics`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) records `cube_lifted`, `cube_placed`, `episode_success`.
+5. Each step: [`EpisodeCubeTracker`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) tracks cube state. After success (clear lift then released on table), the episode runs **60 more steps** then stops early.
+6. After each episode: [`evaluate_episode_metrics`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) writes per-episode flags to `rollout_summary.json`.
+
+**Success criteria**
+
+| Outcome | Condition |
+|---------|-----------|
+| **Success** | Cube cleared the on-table band (`z > 0.845 m`) at least once, then **released** on the table (`|z - 0.745| < 0.08 m`, low velocity, gripper open) on a later step |
+| **Failure** | Cube never lifted; stays on the table regardless of robot motion |
+| **Failure** | Cube lifted but never released on the table before episode end |
+
+Lift duration has no minimum. Return uses `cube_is_placed` (on-table + stable + open gripper) so lowering with a closed gripper through the height band does not count as success.
+
+**`rollout_summary.json` per-episode fields**
+
+| Field | Meaning |
+|-------|---------|
+| `cube_lifted` | Cube cleared the on-table height band at least once |
+| `cube_returned_after_lift` | After lift, cube was released on table (`cube_is_placed`) |
+| `cube_on_table` | On-table stable state at final step, no gripper check (diagnostic) |
+| `cube_dropped` | Cube fell below table at final step (diagnostic) |
+| `episode_success` | `cube_lifted` and `cube_returned_after_lift` |
+| `stop_reason` | `success` (placed + 60-step tail), `no_pick` (no clear lift within ~400 steps), `no_place` (lifted but not released within ~400 steps after lift), or `env_done` (drop/timeout) |
+| `steps` | Steps taken (early stop on success or failed attempt; max ~800 on failure vs 1800 env timeout) |
 
 **Key files**
 
@@ -751,8 +774,9 @@ Add `--visual` anywhere to watch in the Isaac Sim GUI instead of headless mode.
 **Expected result:**
 
 - Sidecar prints `[OK] ACT sidecar listening on 127.0.0.1:5555`
-- Per-episode lines: `[EP 1/10] success=... lifted=... placed=... steps=...`
+- Per-episode lines: `[EP 1/10] success=... lifted=... returned=... on_table=... stop=... steps=...`
 - Summary written to `~/trossen_ai_isaac/outputs/eval/rollout_summary.json`
+- Successful episodes stop ~60 steps after release; failed attempts stop after one try (~400 steps without pick, or ~400 steps after lift without release) instead of the full 30 s env timeout
 
 ---
 
@@ -776,6 +800,7 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 - **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment (wrapper: `run_verify_and_train.sh`)
 - **VR recording hardware validation pending:** `record_dual_arm_vr.py` is implemented; headset-on-workstation confirmation of camera quality and XR compatibility is still required ([Epic 4 §6.3](EPIC4_VR_INTEGRATION.md#63-current-limitations))
 - **Sim eval is metrics-only:** closed-loop rollout reports success metrics; it does not write an `eval_*` LeRobot dataset like optional real-robot recording
+- **Sim eval uses one pick-place attempt per episode:** early stop on success (+60 steps) or failure (`no_pick` / `no_place` within ~400 steps); see [§4.8](#48-sim-act-evaluation)
 - **Reach task has no automated success metrics:** the Reach *recording* scene is an IL sandbox; the separate *Lift* joint-position env used for ACT rollout does have lift/place metrics
 
 ---
@@ -794,6 +819,10 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 | `BrokenPipeError` / connection reset during eval | Probe connection closed sidecar session | Fixed: single persistent TCP connect in `act_rollout.py` |
 | `PreTrainedPolicy` abstract class error | Wrong policy loader in sidecar | Use `ACTPolicy.from_pretrained` via current `policy_sidecar.py` |
 | Eval policy moves wrong arm | Checkpoint not 7D right-arm | Record/retrain with `--record_arm right` |
+| Visual success but `success=False` | Gripper closed while cube in height band | Return requires `cube_is_placed` (open gripper + on-table); see [§4.8](#48-sim-act-evaluation) |
+| `success=True` but cube still gripped | Old height-only return detection | Fixed: release requires open gripper |
+| Eval runs full 30 s on failure | No failure early-stop | Fixed: `stop_reason=no_pick` or `no_place` ends episode after one attempt |
+| `success=True` at ~60 steps during approach | Lift/on-table threshold overlap | Fixed: clear lift requires `z > 0.845 m` before return counts |
 
 ### Simulation and physics issues
 

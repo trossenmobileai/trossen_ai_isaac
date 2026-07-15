@@ -69,6 +69,7 @@ print('OK')
   ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2 0
 
 # Closed-loop ACT rollout (writes ~/trossen_ai_isaac/outputs/eval/rollout_summary.json)
+# Per-episode: success, lifted, returned, on_table, stop_reason (success|no_pick|no_place|env_done), steps
 ./scripts/imitation_learning/run_play_act.sh
 
 # Visual mode: add --visual anywhere

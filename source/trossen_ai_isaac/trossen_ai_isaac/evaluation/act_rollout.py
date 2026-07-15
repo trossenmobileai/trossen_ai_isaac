@@ -52,7 +52,7 @@ from trossen_ai_isaac.evaluation.policy_client import PolicySidecarClient, build
 from trossen_ai_isaac.recording.frame_capture import capture_images, capture_state
 from trossen_ai_isaac.recording.schema import RIGHT_JOINT_NAMES, RecordingLayout
 from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.lift.mdp.metrics import (
-    cube_height_w,
+    EpisodeCubeTracker,
     evaluate_episode_metrics,
 )
 from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import (
@@ -193,7 +193,7 @@ def run_act_rollout(
             for episode_idx in range(num_episodes):
                 env.reset()
                 client.reset()
-                max_cube_height = float(cube_height_w(env)[0].item())
+                tracker = EpisodeCubeTracker()
                 done = False
                 steps = 0
 
@@ -205,12 +205,16 @@ def run_act_rollout(
                     env_action = _policy_action_to_env(action_7d, env)
                     _obs, _reward, terminated, truncated, _info = env.step(env_action)
                     steps += 1
-                    max_cube_height = max(max_cube_height, float(cube_height_w(env)[0].item()))
-                    done = bool(terminated[0].item() or truncated[0].item())
+                    tracker.update(env, steps)
+                    env_done = bool(terminated[0].item() or truncated[0].item())
+                    tracker_stop = tracker.should_stop(steps)
+                    done = env_done or tracker_stop
+                    if env_done and tracker.stop_reason == "running":
+                        tracker.stop_reason = "env_done"
                     if simulation_app is not None:
                         simulation_app.update()
 
-                metrics = evaluate_episode_metrics(env, max_cube_height=max_cube_height)
+                metrics = evaluate_episode_metrics(env, tracker=tracker)
                 episode_result = {
                     "episode": episode_idx,
                     "steps": steps,
@@ -219,7 +223,8 @@ def run_act_rollout(
                 results.append(episode_result)
                 print(
                     f"[EP {episode_idx + 1}/{num_episodes}] success={metrics.episode_success} "
-                    f"lifted={metrics.cube_lifted} placed={metrics.cube_placed} steps={steps}"
+                    f"lifted={metrics.cube_lifted} returned={metrics.cube_returned_after_lift} "
+                    f"on_table={metrics.cube_on_table} stop={metrics.stop_reason} steps={steps}"
                 )
         finally:
             env.close()

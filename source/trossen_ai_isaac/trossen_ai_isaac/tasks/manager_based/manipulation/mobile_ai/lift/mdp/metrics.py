@@ -41,10 +41,17 @@ from isaaclab.managers import SceneEntityCfg
 TABLE_SURFACE_Z = 0.71
 CUBE_REST_Z = 0.745
 LIFT_DELTA_Z = 0.08
-PLACE_Z_TOLERANCE = 0.04
+PLACE_Z_TOLERANCE = 0.08
+# Eval lift must clear the on-table band upper edge to avoid false positives on approach.
+LIFT_CLEAR_MARGIN = 0.02
+LIFT_CLEAR_Z = CUBE_REST_Z + PLACE_Z_TOLERANCE + LIFT_CLEAR_MARGIN
 PLACE_VEL_THRESHOLD = 0.08
 GRIPPER_OPEN_THRESHOLD = 0.02
 DROP_Z = 0.65
+POST_SUCCESS_STEPS = 60
+# One pick-place attempt: stop early on failure instead of running the full env timeout.
+MAX_APPROACH_STEPS = 400
+MAX_STEPS_AFTER_LIFT = 400
 
 LEFT_CARRIAGE = "follower_left_left_carriage_joint"
 RIGHT_CARRIAGE = "follower_right_left_carriage_joint"
@@ -55,12 +62,68 @@ class EpisodeMetrics:
     """Scalar episode outcome flags for logging and evaluation."""
 
     cube_lifted: bool
-    cube_placed: bool
+    cube_on_table: bool
+    cube_returned_after_lift: bool
+    cube_dropped: bool
     episode_success: bool
+    stop_reason: str
     cube_height: float
     cube_speed: float
     left_gripper: float
     right_gripper: float
+
+
+@dataclass
+class EpisodeCubeTracker:
+    """Track cube state over an episode for temporal success criteria."""
+
+    ever_lifted: bool = False
+    first_lift_step: int | None = None
+    returned_after_lift: bool = False
+    success_trigger_step: int | None = None
+    post_success_steps: int = 0
+    stop_reason: str = "running"
+
+    def update(self, env: ManagerBasedEnv, step: int, env_id: int = 0) -> None:
+        """Update tracker from the current env state."""
+        if not self.ever_lifted and bool(cube_is_clearly_lifted(env)[env_id].item()):
+            self.ever_lifted = True
+            self.first_lift_step = step
+
+        if (
+            self.ever_lifted
+            and self.first_lift_step is not None
+            and step > self.first_lift_step
+            and not self.returned_after_lift
+            and bool(cube_is_placed(env)[env_id].item())
+        ):
+            self.returned_after_lift = True
+            self.success_trigger_step = step
+
+        if self.is_success() and self.success_trigger_step is not None:
+            self.post_success_steps += 1
+
+    def is_success(self) -> bool:
+        """True when the cube was lifted and later released on the table."""
+        return self.ever_lifted and self.returned_after_lift
+
+    def should_stop(self, step: int) -> bool:
+        """Stop after success tail, or when the single pick-place attempt fails."""
+        if self.is_success() and self.post_success_steps >= POST_SUCCESS_STEPS:
+            self.stop_reason = "success"
+            return True
+        if not self.ever_lifted and step >= MAX_APPROACH_STEPS:
+            self.stop_reason = "no_pick"
+            return True
+        if (
+            self.ever_lifted
+            and self.first_lift_step is not None
+            and not self.is_success()
+            and step - self.first_lift_step >= MAX_STEPS_AFTER_LIFT
+        ):
+            self.stop_reason = "no_place"
+            return True
+        return False
 
 
 def cube_height_w(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("cube")) -> torch.Tensor:
@@ -76,6 +139,29 @@ def cube_is_lifted(
 ) -> torch.Tensor:
     """True when the cube is lifted above the table."""
     return cube_height_w(env, asset_cfg) > minimal_height
+
+
+def cube_is_clearly_lifted(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("cube"),
+    minimal_height: float = LIFT_CLEAR_Z,
+) -> torch.Tensor:
+    """True when the cube clears the on-table height band (eval lift detection)."""
+    return cube_height_w(env, asset_cfg) > minimal_height
+
+
+def cube_on_table(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("cube"),
+) -> torch.Tensor:
+    """True when the cube is resting on the table with low velocity (no gripper check)."""
+    cube: RigidObject = env.scene[asset_cfg.name]
+    height = cube.data.root_pos_w[:, 2]
+    speed = torch.linalg.norm(cube.data.root_lin_vel_w, dim=1)
+
+    on_table = torch.abs(height - CUBE_REST_Z) < PLACE_Z_TOLERANCE
+    stable = speed < PLACE_VEL_THRESHOLD
+    return on_table & stable
 
 
 def cube_is_placed(
@@ -111,7 +197,7 @@ def cube_dropped(
 def evaluate_episode_metrics(
     env: ManagerBasedEnv,
     *,
-    max_cube_height: float,
+    tracker: EpisodeCubeTracker,
     env_id: int = 0,
 ) -> EpisodeMetrics:
     """Compute episode-level success flags for rollout logging."""
@@ -125,14 +211,17 @@ def evaluate_episode_metrics(
     left_grip = float(robot.data.joint_pos[env_id, left_idx].item())
     right_grip = float(robot.data.joint_pos[env_id, right_idx].item())
 
-    lifted = max_cube_height > (TABLE_SURFACE_Z + LIFT_DELTA_Z)
-    placed = bool(cube_is_placed(env)[env_id].item())
-    success = lifted and placed
+    on_table = bool(cube_on_table(env)[env_id].item())
+    dropped = bool(cube_dropped(env)[env_id].item())
+    success = tracker.is_success()
 
     return EpisodeMetrics(
-        cube_lifted=lifted,
-        cube_placed=placed,
+        cube_lifted=tracker.ever_lifted,
+        cube_on_table=on_table,
+        cube_returned_after_lift=tracker.returned_after_lift,
+        cube_dropped=dropped,
         episode_success=success,
+        stop_reason=tracker.stop_reason,
         cube_height=cube_h,
         cube_speed=cube_speed,
         left_gripper=left_grip,

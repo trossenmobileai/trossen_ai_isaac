@@ -334,6 +334,8 @@ python scripts/imitation_learning/training/smoke_train_act.py \
     ~/lerobot_trossen/datasets/my_dataset/merged 0
 
 # Phase B — closed-loop ACT evaluation (10 episodes, metrics in rollout_summary.json)
+# Success: clear lift (z > 0.845 m) then release on table (height + open gripper).
+# Episodes stop early on success (+60 steps) or after one failed attempt (~400 steps).
 ./scripts/imitation_learning/run_play_act.sh \
     ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
     10 60

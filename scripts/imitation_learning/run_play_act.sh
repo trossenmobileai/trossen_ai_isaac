@@ -18,6 +18,11 @@
 #
 # Results are written to:
 #   ~/trossen_ai_isaac/outputs/eval/rollout_summary.json
+#
+# Episode control (see metrics.py):
+#   - Success: cube clears on-table band (z > 0.845 m), then released on table (cube_is_placed)
+#   - Early stop: +60 steps after success, or ~400 steps if no pick / ~400 steps after lift if no place
+#   - Terminal line includes stop_reason: success | no_pick | no_place | env_done
 # ============================================================================
 
 set -euo pipefail
