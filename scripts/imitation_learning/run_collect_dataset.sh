@@ -30,6 +30,7 @@
 #   - Right hand controls the right arm (left arm is frozen/locked).
 #   - Workstation keyboard controls:
 #       U  — engage teleop (right hand starts tracking the arm)
+#       I  — pause teleop
 #       N  — start recording current episode; press N again to save + reset
 #       M  — discard current episode buffer (bad attempt, does not count)
 #       B  — re-anchor (re-snapshot hand pose → EE pose mapping)

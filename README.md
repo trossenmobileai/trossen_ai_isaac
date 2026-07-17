@@ -45,11 +45,12 @@ If you just cloned the fork, use this path:
 
 | Doc | When to read it |
 |-----|-----------------|
-| [`docs/README.md`](docs/README.md) | Orientation (2 minutes) |
-| [`docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md`](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) | Full sim pipeline: scene, recording, train ACT/Pi0, eval architecture |
-| [`docs/EPIC4_VR_INTEGRATION.md`](docs/EPIC4_VR_INTEGRATION.md) | Quest 3 / ALVR / OpenXR teleop and VR recording (production demos) |
+| [`docs/README.md`](docs/README.md) | **Repo docs index** — goals, timelines, page maps, env, checklist |
+| [`docs/epic3/`](docs/epic3/) | Epic 3 design pages (tasks, teleop, recording, training, evaluation) |
+| [`docs/epic4/`](docs/epic4/) | Epic 4 design pages (VR stack, teleop, recording) |
 | [`docs/IL_WORKFLOW_CHEATSHEET.md`](docs/IL_WORKFLOW_CHEATSHEET.md) | Collect → verify → train → eval commands |
 | [`docs/ACT_EVAL_REPORT_100K.md`](docs/ACT_EVAL_REPORT_100K.md) | ACT 100k closed-loop results (56.7%) |
+| [`docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md`](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [`docs/EPIC4_VR_INTEGRATION.md`](docs/EPIC4_VR_INTEGRATION.md) | **BookStack book intros** (same content as sections in `docs/README.md`) |
 
 Official upstream tutorial: [Trossen AI Isaac](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html).
 
@@ -133,7 +134,7 @@ You should see **WXAI** tasks (upstream) and **Mobile AI** tasks (this fork), in
 
 ### Extra tools for the IL pipeline
 
-Recording/verify and policy training use separate Python environments from Isaac Sim (different Python versions). Full setup is in [Epic 3 §4.1 / §5](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md). In short you will need:
+Recording/verify and policy training use separate Python environments from Isaac Sim (different Python versions). Full setup is in [Tasks and scene](docs/epic3/02-tasks-and-scene.md) / [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md). In short you will need:
 
 - LeRobot verify venv (e.g. `~/lerobot_trossen/.venv`) for dataset checks
 - `lerobot_train` conda env for ACT / Pi0 training and the eval sidecar
@@ -326,7 +327,7 @@ Devices: `keyboard`, `spacemouse`, `gamepad`.
 | Script | Robot | Notes |
 |--------|-------|--------|
 | `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs |
-| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR); see [Epic 4](docs/EPIC4_VR_INTEGRATION.md) |
+| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR); see [VR teleoperation](docs/epic4/04-vr-teleoperation.md) |
 | `record_dual_arm.py` | Mobile AI | Keyboard/gamepad → LeRobot dataset |
 | `record_dual_arm_vr.py` | Mobile AI | VR → LeRobot dataset |
 | `teleop_se3_agent.py` | WXAI | Generic Se3 teleop |
@@ -343,7 +344,7 @@ cd ~/trossen_ai_isaac   # required — run teleop from this clone
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
 ```
 
-Keyboard/gamepad Mobile AI: **J** resets the environment (same as VR; gamepad uses **B**). VR defaults to single-arm control (TAB switches arms). Pass `--dual_arm` for both arms. Full CLI flags and VR setup: [Epic 4](docs/EPIC4_VR_INTEGRATION.md) (keyboard/gamepad flags: [Epic 3 §5.3](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#53-keyboard-or-gamepad-teleoperation)).
+Keyboard/gamepad Mobile AI: **J** resets the environment (same as VR; gamepad uses **B**). VR defaults to single-arm control (TAB switches arms). Pass `--dual_arm` for both arms. Full CLI flags and VR setup: [VR teleoperation](docs/epic4/04-vr-teleoperation.md) / [docs index — Epic 4](docs/README.md#epic-4--vr-integration) (keyboard/gamepad keys: [Teleoperation](docs/epic3/03-teleoperation.md)).
 
 ### Leader arm (WXAI hardware)
 
@@ -384,15 +385,15 @@ Evaluate in Isaac Sim  (policy sidecar + lift play env)
 
 | Stage | Entry point | Details |
 |-------|-------------|---------|
-| Record (VR, production) | `scripts/imitation_learning/run_collect_dataset.sh` | Epic 4 §5.4, Epic 3 §5.5 |
-| Record (keyboard, alternate) | `scripts/imitation_learning/recording/record_dual_arm.py` | Epic 3 §5.8 |
-| Merge VR shards | `scripts/imitation_learning/run_merge_dataset.sh` | Epic 4 |
-| Verify | `scripts/imitation_learning/validation/verify_dataset.py` | Epic 3 §5.9 |
-| Train ACT (10k wrapper) | `scripts/imitation_learning/run_verify_and_train.sh` | Epic 3 §5.10 |
-| Train Pi0 | `scripts/imitation_learning/run_train_pi0.sh` | Epic 3 §5.12 |
-| Open-loop replay | `scripts/imitation_learning/run_play_replay.sh` | Epic 3 §5.11 |
-| Closed-loop ACT eval | `scripts/imitation_learning/run_play_act.sh` | Epic 3 §5.11 |
-| Closed-loop Pi0 eval | `scripts/imitation_learning/run_play_pi0.sh` | Epic 3 §5.13 (deferred) |
+| Record (VR, production) | `scripts/imitation_learning/run_collect_dataset.sh` | [VR recording](docs/epic4/05-vr-recording.md), [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md) |
+| Record (keyboard, smoke) | `scripts/imitation_learning/recording/record_dual_arm.py` | [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md) |
+| Merge VR shards | `scripts/imitation_learning/run_merge_dataset.sh` | [VR recording](docs/epic4/05-vr-recording.md), [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md) |
+| Verify | `scripts/imitation_learning/validation/verify_dataset.py` | [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md) |
+| Train ACT (10k wrapper) | `scripts/imitation_learning/run_verify_and_train.sh` | [Training](docs/epic3/05-training.md) |
+| Train Pi0 | `scripts/imitation_learning/run_train_pi0.sh` | [Training](docs/epic3/05-training.md) |
+| Open-loop replay | `scripts/imitation_learning/run_play_replay.sh` | [Evaluation](docs/epic3/06-evaluation.md) |
+| Closed-loop ACT eval | `scripts/imitation_learning/run_play_act.sh` | [Evaluation](docs/epic3/06-evaluation.md) |
+| Closed-loop Pi0 eval | `scripts/imitation_learning/run_play_pi0.sh` | Deferred — [Evaluation](docs/epic3/06-evaluation.md) |
 
 **Example — production VR recording (wrapper):**
 
@@ -423,7 +424,7 @@ cd ~/trossen_ai_isaac
 
 Checkpoints live under `~/trossen_ai_isaac/outputs/train/<job>/checkpoints/` when present on the machine.
 
-**Reporting ACT eval (summary):** 30 episodes @ 60 FPS on the 100k checkpoint → **56.7% success (17/30)**. Full analysis: [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md). Training / procedure: [Epic 3 §4.9](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#49-training-runs-act-and-pi0), [§5.11](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout).
+**Reporting ACT eval (summary):** 30 episodes @ 60 FPS on the 100k checkpoint → **56.7% success (17/30)**. Full analysis: [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md). Training / procedure: [Training](docs/epic3/05-training.md), [Evaluation](docs/epic3/06-evaluation.md), [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop).
 
 ```bash
 cd ~/trossen_ai_isaac
@@ -483,8 +484,9 @@ robot.reset_to_default_pose()
 
 **This fork**
 
-- [Mobile AI epic docs](docs/README.md)
+- [Mobile AI docs index](docs/README.md)
 - [IL Workflow Cheat Sheet](docs/IL_WORKFLOW_CHEATSHEET.md)
 - [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md)
-- [Epic 3 — Simulation Training Pipeline](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md)
-- [Epic 4 — VR Integration](docs/EPIC4_VR_INTEGRATION.md)
+- [Epic 3 pages](docs/epic3/)
+- [Epic 4 pages](docs/epic4/)
+- BookStack intros: [Epic 3 hub](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md), [Epic 4 hub](docs/EPIC4_VR_INTEGRATION.md)

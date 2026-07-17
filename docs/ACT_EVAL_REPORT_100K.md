@@ -1,8 +1,8 @@
 # ACT Evaluation Report — 100k, 30 Episodes
 
 > Reporting result for closed-loop ACT policy quality in the Mobile AI digital twin.
-> Architecture and how to run: [Epic 3 §4.10](EPIC3_SIMULATION_TRAINING_PIPELINE.md#410-sim-act--pi0-evaluation), [§5.11](EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout).
-> Training context: [Epic 3 §4.9](EPIC3_SIMULATION_TRAINING_PIPELINE.md#49-training-runs-act-and-pi0).
+> Architecture and metrics: [Evaluation](epic3/06-evaluation.md). How to run: [IL Workflow Cheat Sheet](IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop).
+> Training context: [Training](epic3/05-training.md).
 
 ## Summary
 
@@ -19,7 +19,7 @@ This report documents the closed-loop performance of the **ACT 100k** policy in 
 | Episodes | 30 |
 | Control rate | 60 FPS (matches recording) |
 | Success definition | Clear lift (`z > 0.845 m`) then release on table (`cube_is_placed`) |
-| Early stop | Success criteria / metrics in [Epic 3 §4.10](EPIC3_SIMULATION_TRAINING_PIPELINE.md#410-sim-act--pi0-evaluation) / [Epic 3 §5.11](EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout) |
+| Early stop | See [Evaluation — metrics](epic3/06-evaluation.md#metrics) |
 | Result artifact | `~/trossen_ai_isaac/outputs/eval/act/rollout_summary_30eps.json` |
 
 Cube color (red / green / blue) is randomized per episode by the play environment; the summary breaks success down by color.
@@ -54,12 +54,14 @@ All 13 failures ended with `no_progress`: the cube never left the on-table heigh
 - Performance is similar across cube colors (roughly 54–63%), so color randomization is not the dominant failure driver.
 - The main gap is **approach / grasp** (never lifting), not placing after a successful lift.
 
-Reproduce or extend the run with the command in [Epic 3 §5.11](EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout). Architecture and metric field definitions: [Epic 3 §4.10](EPIC3_SIMULATION_TRAINING_PIPELINE.md#410-sim-act--pi0-evaluation).
+Reproduce or extend the run with the [cheat sheet evaluate section](IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop). Architecture and metric field definitions: [Evaluation](epic3/06-evaluation.md).
 
 ## Related documentation
 
-- [Epic 3 — Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Docs index](README.md#epic-3--simulation-training-pipeline) (Epic 3 section)
+- [Evaluation](epic3/06-evaluation.md)
 - [IL Workflow Cheat Sheet](IL_WORKFLOW_CHEATSHEET.md)
+- BookStack: [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md)
 
 ---
 
