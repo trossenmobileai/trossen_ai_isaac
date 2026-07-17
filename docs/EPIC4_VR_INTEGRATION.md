@@ -33,13 +33,13 @@ VR teleoperation allows an operator to wear a **Meta Quest 3** headset, view the
 
 ### Role of VR in the project
 
-[Epic 3](EPIC3_SIMULATION_TRAINING_PIPELINE.md) established the Mobile AI digital twin, keyboard/gamepad teleoperation, and the LeRobot recording pipeline. Epic 4 adds a **natural dual-arm** input path: the left hand drives the left arm and the right hand drives the right arm at the same time. Keyboard and gamepad teleoperation ([§4.4 of Epic 3](EPIC3_SIMULATION_TRAINING_PIPELINE.md#44-dual-arm-teleoperation)) controls one arm at a time (TAB or Y to switch).
+[Epic 3](EPIC3_SIMULATION_TRAINING_PIPELINE.md) established the Mobile AI digital twin, keyboard/gamepad teleoperation, and the LeRobot recording pipeline. Epic 4 adds Quest 3 hand-tracking teleoperation and was the **production path for demonstration collection** on this project. VR can drive both arms at once; keyboard/gamepad teleoperation ([§4.5 of Epic 3](EPIC3_SIMULATION_TRAINING_PIPELINE.md#45-dual-arm-keyboardgamepad-teleoperation)) controls one arm at a time (TAB or Y to switch).
 
 VR also supports **safe practice**: operators manipulate the robot in simulation with no hardware collisions, cable tangles, or joint wear.
 
 ### Wider project context
 
-The long-term objective is VR-collected demonstrations feeding the same LeRobot pipeline described in [Epic 3 §4.6](EPIC3_SIMULATION_TRAINING_PIPELINE.md#46-imitation-learning-recording-pipeline). The repository now includes a dedicated VR recording entrypoint plus camera-compatibility probes so Quest teleoperation can be exercised against the record task directly.
+This project’s **reporting train set** (`mobile_ai_right_pick_place_20260714_v2`) was collected with VR via [`run_collect_dataset.sh`](../scripts/imitation_learning/run_collect_dataset.sh) / [`record_dual_arm_vr.py`](../scripts/imitation_learning/recording/record_dual_arm_vr.py) using `--record_arm right`. Pick-and-place needs one arm; operators focus on the active hand, and VR often loses tracking of the unused arm (which then drifts). Episodes feed the same LeRobot pipeline described in [Epic 3 §4.7](EPIC3_SIMULATION_TRAINING_PIPELINE.md#47-imitation-learning-recording-pipeline). Keyboard/gamepad recording remains available as an alternate tooling path.
 
 ### Current scope
 
@@ -54,7 +54,8 @@ Readers should complete the Epic 3 foundation before using this report:
 
 - [§3 Background and Key Concepts](EPIC3_SIMULATION_TRAINING_PIPELINE.md#3-background-and-key-concepts): Isaac Lab tasks and shared abbreviations
 - [§4.3 Custom Reach Task Environment](EPIC3_SIMULATION_TRAINING_PIPELINE.md#43-custom-reach-task-environment): task IDs and environment configs
-- [§4.4 Dual-Arm Teleoperation](EPIC3_SIMULATION_TRAINING_PIPELINE.md#44-dual-arm-teleoperation): sixteen-dimensional (16D) action format and control loop
+- [§4.5 Dual-Arm Keyboard/Gamepad Teleoperation](EPIC3_SIMULATION_TRAINING_PIPELINE.md#45-dual-arm-keyboardgamepad-teleoperation): sixteen-dimensional (16D) action format and control loop
+- [§4.6 VR Teleoperation](EPIC3_SIMULATION_TRAINING_PIPELINE.md#46-vr-teleoperation): Epic 3 summary of this epic
 
 ---
 
@@ -158,7 +159,7 @@ VR implementation extends the Epic 3 task and teleoperation framework. The proje
 
 ### 4.1 Integration with the Simulation Pipeline
 
-The VR teleoperation script (`teleop_dual_arm_vr.py`) launches the same Isaac Lab task as keyboard teleoperation: `Isaac-Reach-MobileAI-IK-Abs-Play-v0` ([Epic 3 §4.3](EPIC3_SIMULATION_TRAINING_PIPELINE.md#ik_abs_env_cfgpy--absolute-ik-teleoperation)). Each frame, OpenXR hand tracking data is converted to a 16D action tensor (14D absolute IK poses and 2 binary gripper scalars) and passed to `env.step(action)`.
+The VR teleoperation script (`teleop_dual_arm_vr.py`) launches the same Isaac Lab task as keyboard teleoperation: `Isaac-Reach-MobileAI-IK-Abs-Play-v0` ([Epic 3 §4.3](EPIC3_SIMULATION_TRAINING_PIPELINE.md#ik_abs_env_cfgpy--absolute-ik-teleoperation)). That ID says “Reach” for historical reasons; the environment is the Mobile AI **pick-and-place** scene (table + cube), not a classic reach-to-target RL task (see [Epic 3 naming note](EPIC3_SIMULATION_TRAINING_PIPELINE.md#43-custom-reach-task-environment)). Each frame, OpenXR hand tracking data is converted to a 16D action tensor (14D absolute IK poses and 2 binary gripper scalars) and passed to `env.step(action)`.
 
 The control path is:
 
@@ -316,13 +317,51 @@ Each procedure is described as **Purpose**, then **Command** or **Procedure**, t
 
 ### 5.2 Mobile AI VR Teleoperation
 
-**Purpose:** Run dual-arm VR teleoperation on the Mobile AI Reach task ([§4.3](#43-vr-teleoperation-module)). This is also how the team validated the full VR stack (ALVR, SteamVR, OpenXR, Isaac Lab) on Mobile AI directly.
+**Purpose:** Run dual-arm VR teleoperation on the Mobile AI pick-and-place scene ([§4.3](#43-vr-teleoperation-module); gym ID still says Reach — see [Epic 3 naming note](EPIC3_SIMULATION_TRAINING_PIPELINE.md#43-custom-reach-task-environment)). This is also how the team validated the full VR stack (ALVR, SteamVR, OpenXR, Isaac Lab) on Mobile AI directly.
+
+> Adjust `cd` / Isaac Lab paths and any `--root` dataset directories to match **your** machine before running.
 
 ```bash
 cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
   --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
 ```
+
+#### CLI arguments (`teleop_dual_arm_vr.py`)
+
+From [`teleop/vr/cli.py`](../source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/cli.py). Isaac Lab `AppLauncher` flags also apply; the script forces `--xr` on.
+
+**Teleop / control**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--num_envs` | `1` | Number of environments |
+| `--task` | `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | Absolute-IK gym task (must be an IK-Abs variant) |
+| `--device_name` | `handtracking` | Key into `env_cfg.teleop_devices.devices` for the OpenXR device |
+| `--warmup_frames` | `30` | Consecutive live-tracking frames required before forwarding actions (~0.5 s at 60 Hz) |
+| `--warmup_min_pos` | `0.02` | Min hand position norm (m) to count a frame as live tracking |
+| `--dual_arm` | off | Drive both arms at once; default is single-arm (TAB switches active arm) |
+| `--start_arm` | `left` | First active arm in single-arm mode (`left` / `right`); ignored with `--dual_arm` |
+| `--pinch_hold_dist` | `0.08` | Thumb–index distance (m) below which EE orientation is frozen during pinch; `0` disables |
+| `--anchor_pos` | task cfg | Override XR origin in robot base frame (three floats, meters) |
+| `--anchor_rot` | task cfg | Override XR origin quaternion `w x y z` |
+| `--anchor_mode` | `hand_anchored` | `hand_anchored` (relative hand deltas) or `absolute` (hand pose = IK target) |
+| `--anchor_prim_path` | task cfg | USD prim for XR view anchor; use `--list_bodies` to discover names |
+| `--list_bodies` | off | Print robot body names/poses after env construction, then continue |
+| `--view` | `third_person` | Viewpoint preset: `first_person`, `third_person`, `over_shoulder` |
+| `--autostart` | off | Start teleop after warm-up without waiting for workstation **N** |
+| `--no_hand_markers` | off | Disable debug EE/hand markers |
+| `--control_yaw_deg` | `-90.0` | Yaw (deg) applied to hand-motion deltas in `hand_anchored` mode |
+| `--pose_smoothing` | `0.5` | EMA weight of previous IK pose (`0` = raw, higher = smoother/laggier) |
+
+**Camera / XR compatibility** (`add_vr_camera_args`)
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--keep_cameras` | off | Keep task USD cameras enabled during XR (needed for VR recording) |
+| `--camera_probe_interval` | `0` | If `> 0`, probe record-camera RGB every N sim steps |
+| `--camera_probe_capture_frame` | off | During probes, also run full recording frame capture |
+| `--camera_probe_output` | none | Optional JSON path for probe summary on exit |
 
 **Expected result:** The Quest 3 displays the Isaac Sim scene in stereo. After warm-up, pressing **N** at the workstation engages both arms. Pinch gestures toggle grippers. Left and right hands control the corresponding arms simultaneously.
 
@@ -373,17 +412,19 @@ The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps the record c
 
 ```bash
 # Right-arm-only dataset (7D + cam_high + cam_right_wrist)
+cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
   --repo_id YourUser/mobile_ai_vr_right \
   --root /tmp/mobile_ai_vr_right \
   --record_arm right
 ```
 
-All three modes produce a standard, self-describing [LeRobot v3](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) dataset (same directory layout and `meta/info.json` structure); only the declared feature dimensions and the set of `observation.images.*` cameras differ.
+All three modes produce a standard, self-describing [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) dataset (same directory layout and `meta/info.json` structure); only the declared feature dimensions and the set of `observation.images.*` cameras differ. On-disk layout and write path: [Epic 3 §4.7](EPIC3_SIMULATION_TRAINING_PIPELINE.md#lerobot-dataset-v30-on-disk).
 
 For the staged XR camera-compatibility experiment, run the teleop script with camera retention and probing enabled:
 
 ```bash
+cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
   --task Isaac-Reach-MobileAI-Record-Play-v0 \
   --keep_cameras \
@@ -396,7 +437,7 @@ This prints periodic probe status and writes a JSON report summarizing whether `
 
 #### Multi-session data collection
 
-LeRobot v3 closes its parquet writers permanently when `finalize()` is called (on Ctrl+C or normal exit), so an existing dataset folder cannot be reopened for appending. The supported approach is a **shard-then-merge** workflow:
+LeRobot Dataset v3.0 closes its parquet writers permanently when `finalize()` is called (on Ctrl+C or normal exit), so an existing dataset folder cannot be reopened for appending. The supported approach is a **shard-then-merge** workflow:
 
 1. Each call to `run_collect_dataset.sh` writes its own shard into a timestamped subdirectory:
 
@@ -428,6 +469,7 @@ Debug markers (green keypoint spheres at the tracked wrist/thumb/index, and RGB 
 Quest 3 hand-tracking introduces per-frame jitter in both position and orientation (especially wrist tilt). The `--pose_smoothing` flag applies an exponential low-pass filter to the IK target pose:
 
 ```bash
+cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
   --repo_id YourUser/my_dataset \
   --root /tmp/my_dataset \
@@ -455,10 +497,10 @@ Both `record_dual_arm_vr.py` and `teleop_dual_arm_vr.py` accept this flag.
 | | Keyboard / gamepad | VR |
 |--|-------------------|-----|
 | Script | `teleop_dual_arm_switch.py` / `record_dual_arm.py` | `teleop_dual_arm_vr.py` / `record_dual_arm_vr.py` |
-| Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously |
-| Recording | Yes (`record_dual_arm.py`) | Yes (`record_dual_arm_vr.py`) |
+| Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously (or lock to one with `--record_arm`) |
+| Recording | Supported alternate (`record_dual_arm.py`) | **Production path** for this project (`record_dual_arm_vr.py`, right-arm demos) |
 | Setup complexity | Low | Headset + ALVR + SteamVR |
-| Best suited for | Bulk dataset collection, fast iteration | Natural dual-arm demos, bimanual coordination |
+| Best suited for | Smoke tests, keyboard iteration without a headset | Operator demos feeding the reporting train set |
 
 ### 6.2 Arm Drift (Not Applicable)
 
@@ -466,10 +508,10 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 
 ### 6.3 Current Limitations
 
-- **Hardware validation is still required:** the XR camera-retention and recording path needs headset-on-workstation confirmation that `cam_high`, `cam_left_wrist`, and `cam_right_wrist` produce non-blank videos during VR sessions
+- **Right-arm focus for production demos:** unused-arm tracking drifts when the operator concentrates on the active hand; this project recorded `--record_arm right` only
 - **Setup complexity:** VR requires ALVR, SteamVR, Quest 3, and per-session startup steps
 - **Network dependency:** ALVR requires stable 5 GHz Wi-Fi; institutional networks may block peer-to-peer traffic
-- **No sim policy evaluation:** trained ACT policies cannot yet be rolled out in simulation from this repository
+- **Sim policy evaluation lives in Epic 3:** closed-loop ACT eval is documented in [Epic 3 §5.11](EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout) and the [ACT Evaluation Report](ACT_EVAL_REPORT_100K.md) (trained on this VR-collected right-arm set)
 
 ### 6.4 Design Notes
 
@@ -503,15 +545,20 @@ The IK-Rel arm drift issue documented in [Epic 3 §6.1](EPIC3_SIMULATION_TRAININ
 - [x] [Mobile AI dual-arm VR teleoperation](#43-vr-teleoperation-module) (`teleop_dual_arm_vr.py`); VR stack validated directly on Mobile AI
 - [x] Hand-anchored IK mode with view presets
 - [x] Dedicated VR recording entrypoint (`record_dual_arm_vr.py`) with `run_vr_recording_loop`
+- [x] Production right-arm VR dataset (`mobile_ai_right_pick_place_20260714_v2` via `run_collect_dataset.sh`)
 - [x] Optional XR camera-retention / compatibility probing flags (`--keep_cameras`, `--camera_probe_interval`, `--camera_probe_capture_frame`)
 - [x] VR recording merged to `main` (PR #2)
 
 ### Planned or in progress
 
-- [ ] Headset-on-workstation validation of VR dataset quality (camera readability, episode workflow)
-- [ ] Large-scale synthetic demonstration collection via VR
-- [ ] Sim policy evaluation with VR-collected datasets
+- [ ] Larger-scale VR demonstration collection beyond the current reporting set
+- [ ] Reliable bimanual VR recording (unused-arm tracking when attention is on one hand)
+- [ ] Pi0 closed-loop sim eval on the VR-collected set (see Epic 3)
 
 ### Related documentation
 
-**[Epic 3 — Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md)**: installation, task environments, keyboard/gamepad teleoperation, and LeRobot recording.
+**[Epic 3 — Simulation Training Pipeline](EPIC3_SIMULATION_TRAINING_PIPELINE.md)**: installation, task environments, keyboard/gamepad teleoperation, LeRobot training, and eval architecture.
+
+**[IL Workflow Cheat Sheet](IL_WORKFLOW_CHEATSHEET.md)**: collect → train → eval commands.
+
+**[ACT Evaluation Report](ACT_EVAL_REPORT_100K.md)**: closed-loop ACT 100k results on the VR right-arm dataset.

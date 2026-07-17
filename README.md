@@ -4,43 +4,71 @@
 
 ## Overview
 
-This repository contains NVIDIA Isaac Sim and Isaac Lab integration for Trossen AI robotic arms. It includes USD robot models, inverse kinematics-based task examples, and Isaac Lab tasks for reinforcement learning and imitation learning.
+This repository integrates **NVIDIA Isaac Sim** and **Isaac Lab** with **Trossen AI** robots. It provides USD models, demo scripts, inverse-kinematics helpers, and Isaac Lab tasks for reinforcement learning (RL) and imitation learning (IL).
 
-### What This Repository Offers
+**This repo is a fork** of [TrossenRobotics/trossen_ai_isaac](https://github.com/TrossenRobotics/trossen_ai_isaac). Upstream content (WidowX AI / Stationary AI assets, demos, WXAI RL tasks, controller API) is kept. On top of that, this fork adds a **Mobile AI simulation → LeRobot dataset → ACT / Pi0 train → closed-loop sim eval** pipeline, including VR teleoperation and recording.
 
-- Isaac Sim USD models for Trossen AI robots:
-  - WidowX AI (single arm base, follower, leader left, leader right)
-  - Stationary AI (dual-arm stationary platform)
-  - Mobile AI (dual-arm mobile manipulator)
-- Robot bringup utilities for quick model visualization and testing
-- Differential inverse kinematics controller for Cartesian end-effector control
-- Example scripts for pick-and-place and target following tasks
-- Isaac Lab tasks for reinforcement learning (eg. reach, lift, cabinet)
-- Teleoperation interface for imitation learning data collection
+### What this repository offers
 
-### Tested Environment
+**From upstream (Trossen Robotics)**
+
+- Isaac Sim USD models: WidowX AI (WXAI), Stationary AI, Mobile AI
+- Robot bringup and pick-and-place / follow-target demos
+- Differential IK controller for Cartesian end-effector control
+- Isaac Lab RL tasks for WXAI (reach, lift, cabinet) via RSL-RL
+- Leader-arm and Se3 teleoperation for WXAI
+
+**Added in this fork (Mobile AI IL project)**
+
+- Mobile AI Reach / Record / Lift play environments for teleop, dataset collection, and policy rollout
+- Dual-arm keyboard/gamepad and VR teleoperation
+- LeRobot v3 recording, verify, ACT / Pi0 training wrappers, and sim evaluation (sidecar)
+- Project reports under [`docs/`](docs/README.md) (Epic 3, Epic 4, IL cheat sheet, ACT eval report)
+
+### Tested environment
 
 - Ubuntu 22.04
-- Isaac Sim 5.1.0
-- Isaac Lab 2.3.0
-- NVIDIA GeForce RTX 5090
+- Isaac Sim 5.1.0 (`~/isaacsim/`)
+- Isaac Lab 2.3.0 (`~/IsaacLab/`)
+- NVIDIA GeForce RTX 5090 (other CUDA GPUs may work; adjust env counts for VRAM)
+
+---
+
+## New here? Start with this
+
+If you just cloned the fork, use this path:
+
+1. **Install** Isaac Lab + this extension → [Installation](#installation)
+2. **Sanity-check** that Mobile AI tasks appear → [Quick verification](#quick-verification)
+3. **Skim** how the repo is organized → [Repository layout](#repository-layout)
+4. **Read the project docs** for the Mobile AI IL story (not everything lives in this README):
+
+| Doc | When to read it |
+|-----|-----------------|
+| [`docs/README.md`](docs/README.md) | Orientation (2 minutes) |
+| [`docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md`](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) | Full sim pipeline: scene, recording, train ACT/Pi0, eval architecture |
+| [`docs/EPIC4_VR_INTEGRATION.md`](docs/EPIC4_VR_INTEGRATION.md) | Quest 3 / ALVR / OpenXR teleop and VR recording (production demos) |
+| [`docs/IL_WORKFLOW_CHEATSHEET.md`](docs/IL_WORKFLOW_CHEATSHEET.md) | Collect → verify → train → eval commands |
+| [`docs/ACT_EVAL_REPORT_100K.md`](docs/ACT_EVAL_REPORT_100K.md) | ACT 100k closed-loop results (56.7%) |
+
+Official upstream tutorial: [Trossen AI Isaac](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html).
 
 ---
 
 ## Index
 
 - [Overview](#overview)
+- [New here? Start with this](#new-here-start-with-this)
 - [Installation](#installation)
-- [Repository Layout](#repository-layout)
-- [Robot Assets](#robot-assets)
-- [Isaac Sim Demo Scripts](#isaac-sim-demo-scripts)
-- [Isaac Lab Demo Tasks](#isaac-lab-demo-tasks)
+- [Quick verification](#quick-verification)
+- [Repository layout](#repository-layout)
+- [Robot assets](#robot-assets)
+- [Isaac Sim demo scripts](#isaac-sim-demo-scripts)
+- [Isaac Lab demo tasks](#isaac-lab-demo-tasks)
 - [Teleoperation](#teleoperation)
-- [Imitation Learning Pipeline](#imitation-learning-pipeline)
+- [Imitation learning pipeline (Mobile AI)](#imitation-learning-pipeline-mobile-ai)
 - [Controller API](#controller-api)
-- [IL Pipeline Branches](docs/IL_PIPELINE_BRANCHES.md)
-- [Mobile AI Epic Docs](docs/README.md) — Epic 3 (simulation training) and Epic 4 (VR integration)
-- [Related Links](#related-links)
+- [Related links](#related-links)
 
 ---
 
@@ -48,94 +76,152 @@ This repository contains NVIDIA Isaac Sim and Isaac Lab integration for Trossen 
 
 ### Prerequisites
 
-Install Isaac Lab 2.3.0 following the [official installation guide](https://isaac-sim.github.io/IsaacLab/release/2.3.0/source/setup/installation/index.html). This will also install Isaac Sim 5.1.0. Recommended Installation Method: Binary + Source (binary download for Isaac Sim + source via git for Isaac Lab). **Note:** The recommended installation method mentioned here (Binary + Source) differs from the official recommended method.
+Install **Isaac Lab 2.3.0** following the [official installation guide](https://isaac-sim.github.io/IsaacLab/release/2.3.0/source/setup/installation/index.html). That also installs **Isaac Sim 5.1.0**.
 
-### Clone Repository
+Recommended method for this project: **Binary Isaac Sim + source Isaac Lab** (binary download for Isaac Sim, git clone for Isaac Lab). **Note:** That differs from NVIDIA’s “recommended” all-in-one path in the upstream docs; it matches how this workstation and the Epic docs are set up.
+
+Default paths used everywhere below (**examples from this workstation — replace with your real install locations**):
+
+| Component | Path |
+|-----------|------|
+| Isaac Sim | `~/isaacsim/` |
+| Isaac Lab | `~/IsaacLab/` |
+| This repo | `~/trossen_ai_isaac/` |
+
+> **Do not copy-paste paths blindly.** Paths like `~/trossen_ai_isaac`, `~/IsaacLab`, `~/isaacsim`, and `~/lerobot_trossen/...` must match where those folders actually live on **your** machine. Adjust every command before running it.
+
+### Clone this fork
 
 ```bash
-git clone https://github.com/TrossenRobotics/trossen_ai_isaac.git
-cd trossen_ai_isaac
+git clone https://github.com/trossenmobileai/trossen_ai_isaac.git
+cd ~/trossen_ai_isaac   # if you cloned elsewhere, cd into that clone instead
 ```
 
-### Install Trossen AI Extension (for Isaac Lab)
+If the clone directory is not already at `~/trossen_ai_isaac`, either move/symlink it there or use your actual path in every command below.
+
+Upstream (optional, for comparing against Trossen Robotics):
 
 ```bash
+cd ~/trossen_ai_isaac
+git remote add upstream https://github.com/TrossenRobotics/trossen_ai_isaac.git
+```
+
+### Install the Trossen AI extension (Isaac Lab)
+
+```bash
+cd ~/trossen_ai_isaac   # required
 ~/IsaacLab/isaaclab.sh -p -m pip install -e source/trossen_ai_isaac
 ```
 
-Verify the environments are registered:
+Verify environments are registered:
 
 ```bash
+cd ~/trossen_ai_isaac
 ~/IsaacLab/isaaclab.sh -p scripts/tools/list_envs.py
 ```
 
-You should see output similar to:
+You should see **WXAI** tasks (upstream) and **Mobile AI** tasks (this fork), including:
 
 ```
-| 1  | Isaac-Open-Drawer-WXAI-v0      | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.cabinet.joint_pos_env_cfg:WXAICabinetEnvCfg           |
-| 2  | Isaac-Open-Drawer-WXAI-Play-v0 | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.cabinet.joint_pos_env_cfg:WXAICabinetEnvCfg_PLAY      |
-| 3  | Isaac-Lift-Cube-WXAI-v0        | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.lift.config.joint_pos_env_cfg:WXAICubeLiftEnvCfg      |
-| 4  | Isaac-Lift-Cube-WXAI-Play-v0   | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.lift.config.joint_pos_env_cfg:WXAICubeLiftEnvCfg_PLAY |
-| 5  | Isaac-Lift-Cube-WXAI-IK-Rel-v0 | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.lift.config.ik_rel_env_cfg:WXAICubeLiftEnvCfg         |
-| 6  | Isaac-Lift-Cube-WXAI-IK-Abs-v0 | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.lift.config.ik_abs_env_cfg:WXAICubeLiftEnvCfg         |
-| 7  | Isaac-Reach-WXAI-v0            | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.joint_pos_env_cfg:WXAIReachEnvCfg        |
-| 8  | Isaac-Reach-WXAI-Play-v0       | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.joint_pos_env_cfg:WXAIReachEnvCfg_PLAY   |
-| 9  | Isaac-Reach-WXAI-IK-Rel-v0     | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.ik_rel_env_cfg:WXAIReachEnvCfg           |
-| 10 | Isaac-Reach-WXAI-IK-Abs-v0     | isaaclab.envs:ManagerBasedRLEnv | trossen_ai_isaac.tasks.manager_based.manipulation.wxai.reach.config.ik_abs_env_cfg:WXAIReachEnvCfg           |
-| 11 | Isaac-Reach-MobileAI-IK-Abs-Play-v0 | isaaclab.envs:ManagerBasedRLEnv | ... Mobile AI VR / keyboard teleop |
-| 12 | Isaac-Reach-MobileAI-Record-Play-v0 | isaaclab.envs:ManagerBasedRLEnv | ... Mobile AI IL recording (14D obs + 3 cameras) |
+| … | Isaac-Reach-WXAI-v0                    | … |
+| … | Isaac-Lift-Cube-WXAI-v0                | … |
+| … | Isaac-Open-Drawer-WXAI-v0              | … |
+| … | Isaac-Reach-MobileAI-IK-Abs-Play-v0    | … |  # keyboard / gamepad / VR teleop
+| … | Isaac-Reach-MobileAI-Record-Play-v0    | … |  # LeRobot recording
+| … | Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0 | … |  # closed-loop policy eval
 ```
+
+### Extra tools for the IL pipeline
+
+Recording/verify and policy training use separate Python environments from Isaac Sim (different Python versions). Full setup is in [Epic 3 §4.1 / §5](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md). In short you will need:
+
+- LeRobot verify venv (e.g. `~/lerobot_trossen/.venv`) for dataset checks
+- `lerobot_train` conda env for ACT / Pi0 training and the eval sidecar
+
+You can install Isaac Lab and explore demos/teleop **before** configuring LeRobot.
 
 ---
 
-## Repository Layout
+## Quick verification
+
+After installation, always enter the clone first — relative `scripts/...` paths only work from this repository:
+
+```bash
+cd ~/trossen_ai_isaac   # required — use YOUR clone path if different
+```
+
+> Paths in the commands below (`~/trossen_ai_isaac`, `~/IsaacLab`, `~/isaacsim`, …) are **examples**. Replace them with the real locations on your system before running anything.
+
+Then:
+
+```bash
+# List all registered envs, then scan the output manually for Mobile AI tasks.
+# Expected Mobile AI entries:
+#   Isaac-Reach-MobileAI-IK-Abs-Play-v0          (teleop)
+#   Isaac-Reach-MobileAI-Record-Play-v0          (recording)
+#   Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0   (closed-loop eval)
+~/IsaacLab/isaaclab.sh -p scripts/tools/list_envs.py
+
+# USD model loads in standalone Isaac Sim?
+~/isaacsim/python.sh scripts/demos/robot_bringup.py mobile_ai
+
+# Keyboard teleop (quit from the Isaac window when done)?
+~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_switch.py \
+  --task Isaac-Reach-MobileAI-IK-Abs-Play-v0 --teleop_device keyboard
+```
+
+A longer checklist (including VR) is in [`docs/README.md`](docs/README.md).
+
+---
+
+## Repository layout
 
 Runnable scripts live under `scripts/`; reusable logic lives in the installed `trossen_ai_isaac` package.
 
 ```
-scripts/
-├── teleoperation/              # Human-in-the-loop control (isaaclab.sh -p)
-├── imitation_learning/         # Recording, dataset QA, training smoke
-│   ├── recording/record_dual_arm.py, record_dual_arm_vr.py
-│   ├── smoke/smoke_record_env.py, smoke_record_dataset.py
-│   ├── validation/verify_dataset.py
-│   └── training/smoke_train_act.py
-├── demos/                      # Standalone Isaac Sim scripts (isaacsim/python.sh)
-├── lib/                        # controller.py, leader_arm.py (used by demos)
-├── reinforcement_learning/     # RSL-RL train/play
-└── tools/list_envs.py
-
-source/trossen_ai_isaac/trossen_ai_isaac/
-├── teleop/                     # Library: loops, session, CLI helpers, VR package
-├── recording/                  # Library: LeRobot writer, smokes, runtime
-├── validation/                 # Offline LeRobot dataset checks
-└── training/                   # ACT training smoke helpers
+trossen_ai_isaac/
+├── assets/robots/              # USD models (WXAI, Stationary AI, Mobile AI)
+├── docs/                       # Epic reports + IL glossary (start here for project depth)
+├── scripts/
+│   ├── demos/                  # Standalone Isaac Sim demos (isaacsim/python.sh)
+│   ├── lib/                    # controller.py, leader_arm.py (used by demos)
+│   ├── teleoperation/          # Human-in-the-loop entrypoints (isaaclab.sh -p)
+│   ├── imitation_learning/     # Record, verify, train wrappers, play/eval
+│   ├── reinforcement_learning/ # RSL-RL train/play (WXAI)
+│   └── tools/list_envs.py
+├── source/trossen_ai_isaac/    # Installable Isaac Lab extension + task configs
+└── outputs/                    # Local train/eval artifacts (not required to clone)
 ```
 
 | Location | Role | How you run it |
 |----------|------|----------------|
-| `scripts/teleoperation/` | Teleop **entrypoints** | `~/IsaacLab/isaaclab.sh -p scripts/teleoperation/...` |
-| `scripts/imitation_learning/` | IL **entrypoints** | `isaaclab.sh -p` (recording) or plain Python (verify/train) |
-| `source/.../teleop/` | Teleop **library** | Imported by scripts; not run directly |
-| `source/.../recording/` | Recording **library** | Imported by IL scripts |
+| `scripts/demos/` | Standalone Isaac Sim demos | `~/isaacsim/python.sh scripts/demos/...` |
+| `scripts/teleoperation/` | Teleop entrypoints | `~/IsaacLab/isaaclab.sh -p scripts/teleoperation/...` |
+| `scripts/imitation_learning/` | IL entrypoints | `isaaclab.sh -p` (record) or bash/Python (verify/train/eval) |
+| `scripts/reinforcement_learning/` | RSL-RL train/play | `~/IsaacLab/isaaclab.sh -p ...` |
+| `source/.../tasks/` | Gym task configs | Imported after `pip install -e` |
+| `docs/` | Project reports | Read in a browser / editor |
 
-Mobile AI gym tasks (IL-focused):
+**Mobile AI gym tasks (this fork):**
 
-- `Isaac-Reach-MobileAI-IK-Abs-Play-v0` — keyboard/gamepad/VR teleop (16D IK-Abs actions)
-- `Isaac-Reach-MobileAI-Record-Play-v0` — LeRobot recording (14D joint obs, 3× RGB cameras @ 60 Hz)
+| Task | Use |
+|------|-----|
+| `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | Keyboard / gamepad / VR teleop |
+| `Isaac-Reach-MobileAI-Record-Play-v0` | LeRobot demonstration recording |
+| `Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0` | Closed-loop ACT / Pi0 rollout |
+
+> **Naming note:** These IDs still say **Reach** / **Lift** because that is how they were registered during development (following Isaac Lab WXAI naming). They are **not** classic reach-to-target or lift-only RL tasks. All three are variants of the same **pick-and-place** scene (table + cube: pick up, lift, place back). The gym IDs were left unchanged so existing scripts and docs keep working.
 
 ---
 
-## Robot Assets
+## Robot assets
 
-All robot USD models are located in `assets/robots/`:
+USD models live in `assets/robots/`:
 
 ```
 assets/robots/
-├── mobile_ai/
-│   └── mobile_ai.usd
-├── stationary_ai/
-│   └── stationary_ai.usd
+├── mobile_ai/mobile_ai.usd
+├── stationary_ai/stationary_ai.usd
 └── wxai/
     ├── wxai_base.usd
     ├── wxai_follower.usd
@@ -143,27 +229,23 @@ assets/robots/
     └── wxai_leader_right.usd
 ```
 
-### Asset Generation
-
-All USD files are generated from URDF descriptions in [TrossenRobotics/trossen_arm_description](https://github.com/TrossenRobotics/trossen_arm_description). See [assets/robots/asset_generation.md](assets/robots/asset_generation.md) for detailed generation instructions.
+USD files are generated from URDFs in [TrossenRobotics/trossen_arm_description](https://github.com/TrossenRobotics/trossen_arm_description). See [assets/robots/asset_generation.md](assets/robots/asset_generation.md) for regeneration steps.
 
 ---
 
-## Isaac Sim Demo Scripts
+## Isaac Sim demo scripts
 
-Note: Commands below assume Isaac Sim is installed at `~/isaacsim/`. Adjust the path if your installation directory differs.
+Commands assume Isaac Sim at `~/isaacsim/`.
 
-### Robot Bringup
-
-Load and visualize any robot model:
+### Robot bringup
 
 ```bash
 ~/isaacsim/isaac-sim.sh scripts/demos/robot_bringup.py [robot_name]
 ```
 
-Supported robots: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `wxai_leader_right`, `stationary_ai`, `mobile_ai`
+Supported: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `wxai_leader_right`, `stationary_ai`, `mobile_ai`.
 
-### Pick and Place Demo
+### Pick and place
 
 ```bash
 ~/isaacsim/python.sh scripts/demos/wxai_pick_place.py
@@ -171,9 +253,7 @@ Supported robots: `wxai_base` (default), `wxai_follower`, `wxai_leader_left`, `w
 ~/isaacsim/python.sh scripts/demos/mobile_ai_pick_place.py
 ```
 
-### Follow Target Demo
-
-Real-time end-effector tracking using differential IK:
+### Follow target (differential IK)
 
 ```bash
 ~/isaacsim/python.sh scripts/demos/wxai_follow_target.py
@@ -181,20 +261,18 @@ Real-time end-effector tracking using differential IK:
 
 ---
 
-## Isaac Lab Demo Tasks
+## Isaac Lab demo tasks
 
-**Note:** Commands below assume Isaac Lab is installed at `~/IsaacLab/`. Adjust the path if your installation directory differs.
+Commands assume Isaac Lab at `~/IsaacLab/`.
 
-Available tasks:
-- `Isaac-Reach-WXAI-v0` - Move end-effector to target pose using joint position control
-- `Isaac-Reach-WXAI-IK-Rel-v0` - Reach task with relative IK delta actions
-- `Isaac-Reach-WXAI-IK-Abs-v0` - Reach task with absolute IK pose actions
-- `Isaac-Lift-Cube-WXAI-v0` - Pick up a cube and lift it to a target height
-- `Isaac-Open-Drawer-WXAI-v0` - Open a cabinet drawer by grasping and pulling
+**WXAI tasks (upstream):**
 
-### Reinforcement Learning
+- `Isaac-Reach-WXAI-v0` — joint-position reach
+- `Isaac-Reach-WXAI-IK-Rel-v0` / `Isaac-Reach-WXAI-IK-Abs-v0` — IK action variants
+- `Isaac-Lift-Cube-WXAI-v0` — lift a cube
+- `Isaac-Open-Drawer-WXAI-v0` — open a cabinet drawer
 
-Train a policy using RSL-RL PPO:
+### Reinforcement learning (WXAI)
 
 ```bash
 ~/IsaacLab/isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
@@ -204,14 +282,13 @@ Train a policy using RSL-RL PPO:
     --headless
 ```
 
-**Training Options:**
-- `--num_envs 32`: Number of parallel environments (adjust based on GPU memory)
-- `--max_iterations 4000`: Number of Iterations steps (adjust as per training tasks)
-- `--headless`: Run without GUI for faster training
+- `--num_envs` — parallel envs (tune for GPU memory)
+- `--max_iterations` — training length
+- `--headless` — no GUI (faster)
 
-Training logs and checkpoints are saved to `logs/rsl_rl/<task>/<timestamp>/`.
+Logs/checkpoints: `logs/rsl_rl/<task>/<timestamp>/`.
 
-Resume training from a checkpoint:
+Resume:
 
 ```bash
 ~/IsaacLab/isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
@@ -223,7 +300,7 @@ Resume training from a checkpoint:
     --checkpoint <model>.pt
 ```
 
-Run a trained policy:
+Play a trained policy:
 
 ```bash
 ~/IsaacLab/isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py \
@@ -232,9 +309,7 @@ Run a trained policy:
     --checkpoint logs/rsl_rl/<task>/<timestamp>/<model>.pt
 ```
 
-### Imitation Learning
-
-WXAI teleoperation for data collection:
+### WXAI teleoperation (upstream Se3)
 
 ```bash
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_se3_agent.py \
@@ -242,162 +317,130 @@ WXAI teleoperation for data collection:
     --teleop_device keyboard
 ```
 
-**Teleop Device options:** keyboard, spacemouse, gamepad
+Devices: `keyboard`, `spacemouse`, `gamepad`.
 
 ---
 
 ## Teleoperation
 
-| Script | Robot | Task / notes |
-|--------|-------|----------------|
-| `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs teleop (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) |
-| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR). Single-arm by default (TAB switches active arm, other arm frozen); pass `--dual_arm` for both arms at once |
-| `record_dual_arm.py` | Mobile AI | Keyboard/gamepad LeRobot recording |
-| `record_dual_arm_vr.py` | Mobile AI | VR LeRobot recording |
-| `teleop_se3_agent.py` | WXAI | Generic Se3 keyboard/gamepad teleop |
+| Script | Robot | Notes |
+|--------|-------|--------|
+| `teleop_dual_arm_switch.py` | Mobile AI | Keyboard/gamepad IK-Abs |
+| `teleop_dual_arm_vr.py` | Mobile AI | VR hand tracking (OpenXR + ALVR); see [Epic 4](docs/EPIC4_VR_INTEGRATION.md) |
+| `record_dual_arm.py` | Mobile AI | Keyboard/gamepad → LeRobot dataset |
+| `record_dual_arm_vr.py` | Mobile AI | VR → LeRobot dataset |
+| `teleop_se3_agent.py` | WXAI | Generic Se3 teleop |
 | `teleop_leader_arm.py` | WXAI | Hardware leader arm → sim |
 
 ```bash
-# Mobile AI keyboard teleop
+cd ~/trossen_ai_isaac   # required — run teleop from this clone
+# Mobile AI keyboard
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_switch.py \
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0 --teleop_device keyboard
 
-# Mobile AI VR (requires headset + ALVR/SteamVR OpenXR runtime)
-# Single-arm by default: only the active arm tracks its hand, the other holds
-# its pose. Press TAB at the workstation to switch the active arm (--start_arm
-# sets which arm starts). Add --dual_arm to drive both arms simultaneously.
+# Mobile AI VR (headset + ALVR/SteamVR OpenXR required)
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_dual_arm_vr.py \
     --task Isaac-Reach-MobileAI-IK-Abs-Play-v0
 ```
 
----
+Keyboard/gamepad Mobile AI: **J** resets the environment (same as VR; gamepad uses **B**). VR defaults to single-arm control (TAB switches arms). Pass `--dual_arm` for both arms. Full CLI flags and VR setup: [Epic 4](docs/EPIC4_VR_INTEGRATION.md) (keyboard/gamepad flags: [Epic 3 §5.3](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#53-keyboard-or-gamepad-teleoperation)).
 
-## Imitation Learning Pipeline
+### Leader arm (WXAI hardware)
 
-End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT / Pi0 training.
-
-| Step | Script | Requires |
-|------|--------|----------|
-| Env smoke | `scripts/imitation_learning/smoke/smoke_record_env.py` | Isaac Sim |
-| Dataset smoke | `scripts/imitation_learning/smoke/smoke_record_dataset.py` | Isaac Sim |
-| Record demos (keyboard/gamepad) | `scripts/imitation_learning/recording/record_dual_arm.py` | Isaac Sim + LeRobot |
-| Record demos (VR) | `scripts/imitation_learning/recording/record_dual_arm_vr.py` | Isaac Sim + LeRobot + VR stack |
-| Merge VR shards (multi-session) | `scripts/imitation_learning/recording/merge_datasets.py` | LeRobot venv |
-| Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
-| Train ACT | `scripts/imitation_learning/run_verify_and_train.sh` | `lerobot_train` conda |
-| Verify Pi0 dataset | `scripts/imitation_learning/run_verify_pi0_dataset.sh` | LeRobot venv (PyAV) |
-| Train Pi0 (manual, live progress) | `scripts/imitation_learning/run_train_pi0.sh` | `lerobot_train` conda |
-| Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
-| Replay episode (open-loop) | `scripts/imitation_learning/run_play_replay.sh` | Isaac Sim |
-| Evaluate ACT policy | `scripts/imitation_learning/run_play_act.sh` | Isaac Sim + `lerobot_train` conda |
-| Evaluate Pi0 policy | `scripts/imitation_learning/run_play_pi0.sh` | Isaac Sim + `lerobot_train` conda |
-
-```bash
-# Record demonstrations — keyboard/gamepad (N=toggle episode, M=discard, R=reset)
-~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm.py \
-    --task Isaac-Reach-MobileAI-Record-Play-v0 \
-    --repo_id USER/dataset_name \
-    --root ~/lerobot_trossen/datasets/dataset_name \
-    --fps 60 --enable_cameras
-
-# Record demonstrations — VR (U=start teleop, N=toggle episode, M=discard, J=reset)
-# --record_arm selects what goes into the dataset AND locks teleop to match:
-#   both  (default) => 14D state/action + 3 cameras, both arms teleoperated
-#   left / right     => 7D that-arm joints + cam_high + that arm's wrist camera,
-#                       teleop locked to that arm (TAB disabled). Still a valid
-#                       LeRobot v3 dataset, just fewer feature dims/cameras.
-# --pose_smoothing (default 0.5): exponential low-pass on IK target pose to reduce
-#   Quest hand-tracking jitter. 0=raw, 0.5=balanced, 0.7=very stable/more lag.
-# Each call writes a self-contained shard; merge shards after all sessions (see below).
-~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm_vr.py \
-    --repo_id USER/dataset_name \
-    --root ~/lerobot_trossen/datasets/my_dataset/shards/session_1 \
-    --record_arm right \
-    --fps 60
-
-# Merge shards from multiple sessions into one LeRobot v3 dataset
-~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/recording/merge_datasets.py \
-    --shards_dir ~/lerobot_trossen/datasets/my_dataset/shards \
-    --repo_id USER/dataset_name \
-    --root ~/lerobot_trossen/datasets/my_dataset/merged
-
-# Verify offline
-~/lerobot_trossen/.venv/bin/python scripts/imitation_learning/validation/verify_dataset.py \
-    --root ~/lerobot_trossen/datasets/my_dataset/merged
-
-# Short ACT training smoke (GPU via lerobot_train conda)
-python scripts/imitation_learning/training/smoke_train_act.py \
-    --root ~/lerobot_trossen/datasets/my_dataset/merged
-
-# Full ACT training + verify (see scripts/imitation_learning/run_verify_and_train.sh)
-./scripts/imitation_learning/run_verify_and_train.sh
-
-# Pi0 — verify dataset, then train interactively (live progress bar; do not background)
-./scripts/imitation_learning/run_verify_pi0_dataset.sh
-./scripts/imitation_learning/run_train_pi0.sh
-# Resume Pi0 if interrupted:
-# conda run --no-capture-output -n lerobot_train lerobot-train \
-#   --config_path ~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model/train_config.json \
-#   --resume=true
-
-# Phase A — open-loop replay sanity check (episode 0, 60 fps)
-./scripts/imitation_learning/run_play_replay.sh \
-    ~/lerobot_trossen/datasets/my_dataset/merged 0
-
-# Phase B — closed-loop ACT evaluation (reporting run: 30 episodes)
-# Success: clear lift (z > 0.845 m) then release on table (height + open gripper).
-# Early stop: idle 200 (no_progress), approach 1000 (no_pick), place 500 after lift (no_place),
-# success +60 steps. Metrics include success_rate_by_color.
-# → ~/trossen_ai_isaac/outputs/eval/act/rollout_summary.json
-./scripts/imitation_learning/run_play_act.sh \
-    ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
-    30 60
-
-# Visual smoke (omit headless)
-./scripts/imitation_learning/run_play_act.sh \
-    ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
-    1 --visual
-
-# Pi0: trained, but sim eval deferred (first-step Torch Inductor AUTOTUNE exceeds 120 s
-# sidecar timeout). Wrapper: run_play_pi0.sh → outputs/eval/pi0/. See EPIC3 §5.12.
-```
-
-Real-robot equivalent: `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)). Sim uses a sidecar process for policy inference because Isaac Sim and LeRobot run on different Python versions. ACT and Pi0 share one Isaac eval path (`play_act.py` → `act_rollout.py`); the sidecar loads the policy type from the checkpoint (`act` or `pi0`) and applies LeRobot pre/post-processors. **Reporting eval is ACT-only (30 episodes)** until Pi0 compile/timeout is unblocked.
-
-See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details. See [docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) §4.8 for sim ACT / Pi0 evaluation architecture and troubleshooting.
-
-### Leader Arm Teleoperation
-
-Control the simulated robot using a real Trossen WXAI leader arm. The `trossen_arm` package is installed automatically with the extension. If you need to install it separately (e.g. for the standalone Isaac Sim script):
+The `trossen_arm` package is installed with the extension. For standalone Isaac Sim scripts you can also:
 
 ```bash
 ~/isaacsim/python.sh -m pip install trossen_arm
 ```
 
-**Standalone Isaac Sim:**
-
 ```bash
+# Standalone Isaac Sim
 ~/isaacsim/python.sh scripts/demos/wxai_leader_to_sim.py
-```
 
-**Isaac Lab environment (joint-pos, IK-abs, IK-rel auto-detected from task name):**
-
-```bash
+# Isaac Lab (joint-pos / IK mode inferred from task name)
 ~/IsaacLab/isaaclab.sh -p scripts/teleoperation/teleop_leader_arm.py \
     --task Isaac-Lift-Cube-WXAI-v0
 ```
 
-Pass `--leader_ip` to change the default arm address (`192.168.1.2`).
+Pass `--leader_ip` to override the default (`192.168.1.2`).
+
+---
+
+## Imitation learning pipeline (Mobile AI)
+
+High-level flow for **this fork’s** Mobile AI work:
+
+```text
+Record demos (VR production; keyboard optional)
+        ↓
+Verify LeRobot v3 dataset
+        ↓
+Train ACT and/or Pi0  (lerobot_train conda)
+        ↓
+Evaluate in Isaac Sim  (policy sidecar + lift play env)
+```
+
+**Production demos:** VR only, `--record_arm right` (`mobile_ai_right_pick_place_20260714_v2`). Keyboard/gamepad recording is supported for smoke tests. Step-by-step: [IL Workflow Cheat Sheet](docs/IL_WORKFLOW_CHEATSHEET.md).
+
+| Stage | Entry point | Details |
+|-------|-------------|---------|
+| Record (VR, production) | `scripts/imitation_learning/run_collect_dataset.sh` | Epic 4 §5.4, Epic 3 §5.5 |
+| Record (keyboard, alternate) | `scripts/imitation_learning/recording/record_dual_arm.py` | Epic 3 §5.8 |
+| Merge VR shards | `scripts/imitation_learning/run_merge_dataset.sh` | Epic 4 |
+| Verify | `scripts/imitation_learning/validation/verify_dataset.py` | Epic 3 §5.9 |
+| Train ACT (10k wrapper) | `scripts/imitation_learning/run_verify_and_train.sh` | Epic 3 §5.10 |
+| Train Pi0 | `scripts/imitation_learning/run_train_pi0.sh` | Epic 3 §5.12 |
+| Open-loop replay | `scripts/imitation_learning/run_play_replay.sh` | Epic 3 §5.11 |
+| Closed-loop ACT eval | `scripts/imitation_learning/run_play_act.sh` | Epic 3 §5.11 |
+| Closed-loop Pi0 eval | `scripts/imitation_learning/run_play_pi0.sh` | Epic 3 §5.13 (deferred) |
+
+**Example — production VR recording (wrapper):**
+
+```bash
+cd ~/trossen_ai_isaac   # required
+./scripts/imitation_learning/run_collect_dataset.sh
+./scripts/imitation_learning/run_merge_dataset.sh --verify
+```
+
+**Example — keyboard recording (alternate):**
+
+```bash
+cd ~/trossen_ai_isaac
+~/IsaacLab/isaaclab.sh -p scripts/imitation_learning/recording/record_dual_arm.py \
+    --task Isaac-Reach-MobileAI-Record-Play-v0 \
+    --repo_id USER/dataset_name \
+    --root ~/lerobot_trossen/datasets/dataset_name \
+    --fps 60 --enable_cameras --record_arm right
+```
+
+**Trained artifacts on this project** (same VR right-arm pick-place dataset):
+
+| Job | Policy | Steps | Role |
+|-----|--------|-------|------|
+| `act_mobile_ai_right_v2` | ACT | 10 000 | First full train |
+| `act_mobile_ai_right_v2_100k` | ACT | 100 000 | Reporting eval model |
+| `pi0_mobile_ai_right_v2` | Pi0 | 10 000 | Trained; sim eval deferred |
+
+Checkpoints live under `~/trossen_ai_isaac/outputs/train/<job>/checkpoints/` when present on the machine.
+
+**Reporting ACT eval (summary):** 30 episodes @ 60 FPS on the 100k checkpoint → **56.7% success (17/30)**. Full analysis: [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md). Training / procedure: [Epic 3 §4.9](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#49-training-runs-act-and-pi0), [§5.11](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md#511-evaluate-act-policy-closed-loop-rollout).
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_play_act.sh \
+  ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2_100k/checkpoints/last/pretrained_model \
+  30 60
+```
+
+Sim eval uses a **sidecar** process because Isaac Sim (Python 3.11) and LeRobot training (Python 3.12) differ. Real-robot equivalent: [`lerobot-record --policy.path=...`](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html).
+
+Do **not** expect this README to list every flag and hyperparameter — use the [cheat sheet](docs/IL_WORKFLOW_CHEATSHEET.md) or Epic 3 / Epic 4.
 
 ---
 
 ## Controller API
 
-The `TrossenAIController` class in `scripts/lib/controller.py` provides a unified interface for controlling all Trossen AI robots in standalone Isaac Sim demos.
-
-### Basic Usage
-
-Add `scripts/lib` to your path (demos do this automatically), then:
+`TrossenAIController` in `scripts/lib/controller.py` is the unified interface for standalone Isaac Sim demos (upstream).
 
 ```python
 import sys
@@ -406,7 +449,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 
 from controller import RobotType, TrossenAIController
 
-# Initialize controller
 robot = TrossenAIController(
     robot_path="/World/wxai_robot",
     robot_type=RobotType.WXAI,
@@ -415,27 +457,34 @@ robot = TrossenAIController(
     default_dof_positions=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.044, 0.044],
 )
 
-# Command end-effector pose
 robot.set_end_effector_pose(
     position=np.array([0.3, 0.0, 0.2]),
     orientation=np.array([0.7071, 0.0, 0.7071, 0.0]),  # [w, x, y, z]
 )
-
-# Gripper control
 robot.open_gripper()
 robot.close_gripper()
-
-# Reset to default pose
 robot.reset_to_default_pose()
 ```
 
 ---
 
-## Related Links
+## Related links
+
+**Upstream / vendors**
 
 - [Trossen Robotics](https://www.trossenrobotics.com/)
 - [Trossen Arm Documentation](https://docs.trossenrobotics.com/trossen_arm/)
+- [Trossen AI Isaac tutorial](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html)
 - [Trossen Arm Description (URDF)](https://github.com/TrossenRobotics/trossen_arm_description)
+- [Upstream repo](https://github.com/TrossenRobotics/trossen_ai_isaac)
 - [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim)
 - [NVIDIA Isaac Lab](https://isaac-sim.github.io/IsaacLab)
 - [RSL-RL](https://github.com/leggedrobotics/rsl_rl)
+
+**This fork**
+
+- [Mobile AI epic docs](docs/README.md)
+- [IL Workflow Cheat Sheet](docs/IL_WORKFLOW_CHEATSHEET.md)
+- [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md)
+- [Epic 3 — Simulation Training Pipeline](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 4 — VR Integration](docs/EPIC4_VR_INTEGRATION.md)
