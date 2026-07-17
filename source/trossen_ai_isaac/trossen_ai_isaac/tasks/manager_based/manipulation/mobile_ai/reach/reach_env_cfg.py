@@ -210,7 +210,10 @@ class ObservationsCfg:
 
 def randomize_cube_color_discrete(env, env_ids, asset_cfg: SceneEntityCfg, colors: list[tuple[float, float, float]]):
     """Sets each cube instance to one randomly chosen solid RGB color from `colors`
-    (a true discrete pick — e.g. pure red OR pure green OR pure blue, not a blend)."""
+    (a true discrete pick — e.g. pure red OR pure green OR pure blue, not a blend).
+
+    Stores the chosen RGB on ``env._cube_color_rgb[env_id]`` for eval metrics.
+    """
     asset = env.scene[asset_cfg.name]
     prim_paths = sim_utils.find_matching_prim_paths(asset.cfg.prim_path)
     stage = get_current_stage()
@@ -218,10 +221,14 @@ def randomize_cube_color_discrete(env, env_ids, asset_cfg: SceneEntityCfg, color
     if env_ids is None:
         env_ids = range(len(prim_paths))
 
+    if not hasattr(env, "_cube_color_rgb") or env._cube_color_rgb is None:
+        env._cube_color_rgb = {}
+
     for env_id in env_ids:
         prim_path = prim_paths[int(env_id)]
         cube_prim = stage.GetPrimAtPath(prim_path)
         chosen_rgb = random.choice(colors)
+        env._cube_color_rgb[int(env_id)] = tuple(float(c) for c in chosen_rgb)
         for descendant in Usd.PrimRange(cube_prim):
             attr = descendant.GetAttribute("inputs:diffuseColor")
             if attr and attr.IsValid():

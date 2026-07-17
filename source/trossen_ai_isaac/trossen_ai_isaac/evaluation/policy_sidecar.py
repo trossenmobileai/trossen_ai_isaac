@@ -27,7 +27,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Run ACT inference in a LeRobot-capable Python environment (sidecar server)."""
+"""Run LeRobot policy inference in a sidecar process (ACT, Pi0, etc.)."""
 
 from __future__ import annotations
 
@@ -99,33 +99,30 @@ def _observation_to_batch(observation: dict[str, np.ndarray], task: str) -> dict
     return batch
 
 
-def _load_act_policy(policy_path: Path):
-    """Load an ACT checkpoint via the concrete ``ACTPolicy`` class."""
-    errors: list[str] = []
-    for module_name in (
-        "lerobot.policies.act.modeling_act",
-        "lerobot.common.policies.act.modeling_act",
-    ):
-        try:
-            module = __import__(module_name, fromlist=["ACTPolicy"])
-            return module.ACTPolicy.from_pretrained(str(policy_path))
-        except Exception as exc:
-            errors.append(f"{module_name}: {exc}")
+def _load_policy(policy_path: Path):
+    """Load a LeRobot policy from a pretrained checkpoint directory.
 
-    raise RuntimeError(
-        f"Failed to load ACT policy from {policy_path}. Tried:\n  " + "\n  ".join(errors)
-    )
+    Reads ``config.json`` via ``PreTrainedConfig`` and dispatches to the matching
+    policy class (``act``, ``pi0``, …) through ``get_policy_class``.
+    """
+    from lerobot.configs.policies import PreTrainedConfig
+    from lerobot.policies.factory import get_policy_class
+
+    cfg = PreTrainedConfig.from_pretrained(str(policy_path))
+    policy_cls = get_policy_class(cfg.type)
+    return policy_cls.from_pretrained(str(policy_path))
 
 
-class ACTSidecar:
+class PolicySidecar:
     def __init__(self, policy_path: Path, device: str) -> None:
         from lerobot.policies import make_pre_post_processors
 
         self.device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
         self.policy_path = policy_path
-        self.policy = _load_act_policy(policy_path)
+        self.policy = _load_policy(policy_path)
         self.policy.to(self.device)
         self.policy.eval()
+        self.policy_type = getattr(self.policy.config, "type", type(self.policy).__name__)
 
         device_override = {"device": str(self.device)}
         self.preprocessor, self.postprocessor = make_pre_post_processors(
@@ -148,8 +145,12 @@ class ACTSidecar:
         return action.squeeze(0).detach().cpu().numpy().astype(np.float32)
 
 
+# Backward-compatible alias for callers that imported ACTSidecar by name.
+ACTSidecar = PolicySidecar
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="ACT policy inference sidecar server.")
+    parser = argparse.ArgumentParser(description="LeRobot policy inference sidecar server (ACT, Pi0, …).")
     parser.add_argument("--policy.path", dest="policy_path", type=str, required=True)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5555)
@@ -161,12 +162,15 @@ def main() -> int:
         print(f"[FAIL] Policy path does not exist: {policy_path}", file=sys.stderr)
         return 1
 
-    sidecar = ACTSidecar(policy_path, args.device)
+    sidecar = PolicySidecar(policy_path, args.device)
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((args.host, args.port))
     server.listen(1)
-    print(f"[OK] ACT sidecar listening on {args.host}:{args.port}", flush=True)
+    print(
+        f"[OK] {sidecar.policy_type} sidecar listening on {args.host}:{args.port}",
+        flush=True,
+    )
 
     conn, _addr = server.accept()
     try:

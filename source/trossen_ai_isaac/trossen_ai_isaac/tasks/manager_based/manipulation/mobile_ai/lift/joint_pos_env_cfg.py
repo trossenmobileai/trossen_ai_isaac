@@ -66,12 +66,14 @@ class MobileAILiftEnvCfg_JOINT_POS(MobileAILiftEnvCfg):
             joint_names=LEFT_JOINTS,
             scale=1.0,
             use_default_offset=False,
+            preserve_order=True,
         )
         self.actions.right_arm_action = JointPositionActionCfg(
             asset_name="robot",
             joint_names=RIGHT_JOINTS,
             scale=1.0,
             use_default_offset=False,
+            preserve_order=True,
         )
         self.actions.left_gripper_action = None
         self.actions.right_gripper_action = None
@@ -95,3 +97,5 @@ class MobileAILiftEnvCfg_JOINT_POS_PLAY(MobileAILiftEnvCfg_JOINT_POS):
         self.decimation = 1
         self.sim.render_interval = self.decimation
         self.observations.policy.enable_corruption = False
+        # Warm-up + up to 3 pick attempts + place window need more than 30 s.
+        self.episode_length_s = 90.0

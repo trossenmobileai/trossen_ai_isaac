@@ -26,13 +26,16 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Closed-loop ACT rollout in the Mobile AI joint-position environment.
+"""Closed-loop policy rollout in the Mobile AI joint-position environment.
 
-This module is wired for the 7D right-arm checkpoint produced by the
-single-arm recording pipeline (``--record_arm right``).  The policy
-receives 7D state (right arm joints) + cam_high + cam_right_wrist and
-outputs 7D right-arm joint targets.  The left arm is held at whatever
-position it has after the env reset (it is not moved).
+Shared by ACT and Pi0 via ``run_play_act.sh`` / ``run_play_pi0.sh`` and
+``play_act.py``. Eval thresholds and early-stop rules are locked in
+``lift/mdp/metrics.py`` (EVAL CONTRACT).
+
+Wired for the 7D right-arm checkpoint from ``--record_arm right``: the policy
+receives 7D state (right arm joints) + cam_high + cam_right_wrist and outputs
+7D right-arm joint targets. The left arm is held at the fixed eval start pose
+every step (not moved by the policy).
 """
 
 from __future__ import annotations
@@ -56,7 +59,7 @@ from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.lift.mdp.metric
     evaluate_episode_metrics,
 )
 from trossen_ai_isaac.tasks.manager_based.manipulation.mobile_ai.reach.mdp.observations import (
-    record_joint_pos_14,
+    RECORD_JOINT_NAMES,
 )
 from trossen_ai_isaac.teleop.mobile_ai_ik_abs import make_env_cfg
 
@@ -66,11 +69,52 @@ class RolloutSummary:
     episodes: int
     successes: int
     success_rate: float
+    success_rate_by_color: dict[str, dict[str, float | int]]
     results: list[dict]
+
+
+def _success_rate_by_color(results: list[dict]) -> dict[str, dict[str, float | int]]:
+    """Aggregate per-color episode counts and success rates."""
+    by_color: dict[str, dict[str, float | int]] = {}
+    for row in results:
+        color = str(row.get("cube_color", "unknown"))
+        bucket = by_color.setdefault(color, {"episodes": 0, "successes": 0, "success_rate": 0.0})
+        bucket["episodes"] = int(bucket["episodes"]) + 1
+        if row.get("episode_success"):
+            bucket["successes"] = int(bucket["successes"]) + 1
+    for bucket in by_color.values():
+        eps = int(bucket["episodes"])
+        bucket["success_rate"] = float(bucket["successes"]) / max(eps, 1)
+    return dict(sorted(by_color.items()))
 
 
 # The 7D right-arm recording layout (cam_high + cam_right_wrist, joint indices 7-13).
 _RIGHT_LAYOUT = RecordingLayout.from_arm_mode("right")
+
+# Fixed eval start pose (EVAL CONTRACT — see lift/mdp/metrics.py): arms near home,
+# grippers open (matches recorded demos).
+_GRIPPER_OPEN = 0.044
+# Hold start pose before policy runs (~0.5 s at 60 FPS). Not counted in episode metrics.
+_START_POSE_WARMUP_STEPS = 30
+_EVAL_START_POSE_14 = np.array(
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        _GRIPPER_OPEN,  # left gripper
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        _GRIPPER_OPEN,  # right gripper
+    ],
+    dtype=np.float32,
+)
 
 
 def _build_policy_observation(env) -> dict[str, np.ndarray]:
@@ -86,15 +130,66 @@ def _build_policy_observation(env) -> dict[str, np.ndarray]:
 def _policy_action_to_env(action_7d: np.ndarray, env) -> torch.Tensor:
     """Map the 7D right-arm policy output to a full env action tensor.
 
-    The env uses joint-position control over both arms (14D total).  We
-    read the current 14D joint state, keep the left arm (indices 0–6) at
-    its current position, and set the right arm (indices 7–13) to the
-    policy target.  This prevents the uncontrolled left arm from drifting.
+    The env uses joint-position control over both arms (14D total).  The left
+    arm is held at the fixed eval start pose every step (not the measured
+    state), so physics coupling from the right arm cannot accumulate into a
+    permanent left EE tilt.  The right arm is set to the policy target.
     """
-    current_14d = record_joint_pos_14(env)[0].detach().cpu().numpy().astype(np.float32)
-    full_action = current_14d.copy()
+    full_action = _EVAL_START_POSE_14.copy()
     full_action[7:14] = action_7d[:7]
     return torch.as_tensor(full_action, device=env.device, dtype=torch.float32).unsqueeze(0)
+
+
+def _start_pose_action(env) -> torch.Tensor:
+    """14D start-pose action for all envs."""
+    pose = torch.as_tensor(_EVAL_START_POSE_14, device=env.device, dtype=torch.float32)
+    return pose.unsqueeze(0).expand(env.num_envs, -1).contiguous()
+
+
+def _force_eval_start_pose(env) -> None:
+    """Snap both arms and grippers to a fixed start pose after ``env.reset()``.
+
+    Writes joint state and position targets in one shot (no settle ``env.step``),
+    then seeds the action manager so leftover zero actions (closed gripper /
+    zero joints) are not applied on the next physics step.
+    """
+    robot = env.scene["robot"]
+    joint_ids = [robot.joint_names.index(name) for name in RECORD_JOINT_NAMES]
+    pose = _start_pose_action(env)
+    zero_vel = torch.zeros_like(pose)
+
+    robot.write_joint_state_to_sim(pose, zero_vel, joint_ids=joint_ids)
+    robot.set_joint_position_target(pose, joint_ids=joint_ids)
+    robot.write_data_to_sim()
+    env.scene.write_data_to_sim()
+    env.sim.forward()
+
+    # Action manager resets to zeros (closed grippers). Seed it with the start
+    # pose so the first policy step does not fight stale zero targets.
+    env.action_manager.process_action(pose)
+    env.action_manager.apply_action()
+    env.scene.write_data_to_sim()
+    env.sim.forward()
+
+
+def _warmup_at_start_pose(
+    env,
+    *,
+    warmup_steps: int = _START_POSE_WARMUP_STEPS,
+    simulation_app=None,
+) -> None:
+    """Hold the fixed start pose for a few steps before policy inference.
+
+    Lets PD settle and gives a visible stable home pose in ``--visual`` mode.
+    These steps are not counted toward episode metrics / early-stop budgets.
+    """
+    if warmup_steps <= 0:
+        return
+    hold = _start_pose_action(env)
+    for _ in range(warmup_steps):
+        env.step(hold)
+        if simulation_app is not None:
+            simulation_app.update()
 
 
 # Isaac Sim sets PYTHONPATH/PYTHONHOME for its bundled Python 3.11.  If the
@@ -159,11 +254,12 @@ def run_act_rollout(
     output_dir: Path | str | None = None,
     simulation_app=None,
 ) -> RolloutSummary:
-    """Roll out an ACT checkpoint in simulation via the external policy sidecar.
+    """Roll out an ACT or Pi0 checkpoint in simulation via the policy sidecar.
 
     The checkpoint must have been trained on right-arm-only data (7D state,
-    cam_high + cam_right_wrist images).  The left arm is held at its reset
-    pose for the entire episode.
+    cam_high + cam_right_wrist images).  The left arm is held at its fixed
+    eval start pose for the entire episode. Eval thresholds: see EVAL CONTRACT
+    in ``lift/mdp/metrics.py``.
     """
     policy_path = Path(policy_path).expanduser().resolve()
     output_path = Path(output_dir).expanduser().resolve() if output_dir else None
@@ -192,6 +288,8 @@ def run_act_rollout(
         try:
             for episode_idx in range(num_episodes):
                 env.reset()
+                _force_eval_start_pose(env)
+                _warmup_at_start_pose(env, simulation_app=simulation_app)
                 client.reset()
                 tracker = EpisodeCubeTracker()
                 done = False
@@ -223,7 +321,8 @@ def run_act_rollout(
                 results.append(episode_result)
                 print(
                     f"[EP {episode_idx + 1}/{num_episodes}] success={metrics.episode_success} "
-                    f"lifted={metrics.cube_lifted} returned={metrics.cube_returned_after_lift} "
+                    f"color={metrics.cube_color} lifted={metrics.cube_lifted} "
+                    f"returned={metrics.cube_returned_after_lift} "
                     f"on_table={metrics.cube_on_table} stop={metrics.stop_reason} steps={steps}"
                 )
         finally:
@@ -237,10 +336,12 @@ def run_act_rollout(
             sidecar_proc.kill()
 
     successes = sum(1 for row in results if row["episode_success"])
+    by_color = _success_rate_by_color(results)
     summary = RolloutSummary(
         episodes=num_episodes,
         successes=successes,
         success_rate=successes / max(num_episodes, 1),
+        success_rate_by_color=by_color,
         results=results,
     )
 
@@ -253,4 +354,9 @@ def run_act_rollout(
         f"[OK] Rollout complete: {successes}/{num_episodes} successes "
         f"({summary.success_rate * 100:.1f}%)"
     )
+    for color, stats in by_color.items():
+        print(
+            f"  color={color}: {stats['successes']}/{stats['episodes']} "
+            f"({float(stats['success_rate']) * 100:.1f}%)"
+        )
     return summary

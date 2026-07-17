@@ -26,7 +26,10 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Pick-lift-place success metrics for the Mobile AI lift task."""
+"""Pick-lift-place success metrics for the Mobile AI lift task.
+
+Shared by ACT and Pi0 closed-loop eval (``act_rollout.py`` / ``run_play_*.sh``).
+"""
 
 from __future__ import annotations
 
@@ -36,6 +39,20 @@ import torch
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers import SceneEntityCfg
+
+# =============================================================================
+# EVAL CONTRACT (locked for ACT and Pi0 sim rollouts — change intentionally)
+# -----------------------------------------------------------------------------
+# Env: Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0, FPS 60, episode timeout 90 s
+# Start (act_rollout): arms home, grippers open 0.044 m, warm-up hold, left fixed
+# Success: clear lift (z > LIFT_CLEAR_Z) then cube_is_placed (on-table+stable+open)
+# Early stop:
+#   IDLE_STEPS            -> stop_reason=no_progress
+#   MAX_APPROACH_STEPS    -> stop_reason=no_pick
+#   MAX_STEPS_AFTER_LIFT  -> stop_reason=no_place
+#   POST_SUCCESS_STEPS    -> stop_reason=success
+# Metrics: overall success_rate + success_rate_by_color + per-episode cube_color
+# =============================================================================
 
 # Table top is ~0.71 m; cube spawn center ~0.745 m when resting on the table.
 TABLE_SURFACE_Z = 0.71
@@ -49,12 +66,41 @@ PLACE_VEL_THRESHOLD = 0.08
 GRIPPER_OPEN_THRESHOLD = 0.02
 DROP_Z = 0.65
 POST_SUCCESS_STEPS = 60
-# One pick-place attempt: stop early on failure instead of running the full env timeout.
-MAX_APPROACH_STEPS = 400
-MAX_STEPS_AFTER_LIFT = 400
+# Continuous pick window (no robot reset): hard cap if the cube never lifts.
+APPROACH_STEPS_PER_TRY = 500
+MAX_PICK_TRIES = 3
+MAX_APPROACH_STEPS = 1000
+MAX_STEPS_AFTER_LIFT = 500
+# Stop early if the cube stays on the table with no lift progress for this many steps.
+IDLE_STEPS = 500
 
 LEFT_CARRIAGE = "follower_left_left_carriage_joint"
 RIGHT_CARRIAGE = "follower_right_left_carriage_joint"
+
+# Discrete cube colors used by EventCfg.randomize_cube_color.
+_CUBE_COLOR_NAMES: dict[tuple[float, float, float], str] = {
+    (1.0, 0.0, 0.0): "red",
+    (0.0, 1.0, 0.0): "green",
+    (0.0, 0.0, 1.0): "blue",
+}
+
+
+def cube_color_name(env: ManagerBasedEnv, env_id: int = 0) -> str:
+    """Return the discrete cube color name for this env (red/green/blue/unknown)."""
+    colors = getattr(env, "_cube_color_rgb", None)
+    if not isinstance(colors, dict):
+        return "unknown"
+    rgb = colors.get(int(env_id))
+    if rgb is None:
+        return "unknown"
+    key = tuple(round(float(c), 3) for c in rgb)
+    # Exact match first, then nearest named color.
+    if key in _CUBE_COLOR_NAMES:
+        return _CUBE_COLOR_NAMES[key]
+    for named_rgb, name in _CUBE_COLOR_NAMES.items():
+        if all(abs(a - b) < 0.05 for a, b in zip(key, named_rgb)):
+            return name
+    return "unknown"
 
 
 @dataclass
@@ -67,6 +113,7 @@ class EpisodeMetrics:
     cube_dropped: bool
     episode_success: bool
     stop_reason: str
+    cube_color: str
     cube_height: float
     cube_speed: float
     left_gripper: float
@@ -83,12 +130,14 @@ class EpisodeCubeTracker:
     success_trigger_step: int | None = None
     post_success_steps: int = 0
     stop_reason: str = "running"
+    idle_steps: int = 0
 
     def update(self, env: ManagerBasedEnv, step: int, env_id: int = 0) -> None:
         """Update tracker from the current env state."""
         if not self.ever_lifted and bool(cube_is_clearly_lifted(env)[env_id].item()):
             self.ever_lifted = True
             self.first_lift_step = step
+            self.idle_steps = 0
 
         if (
             self.ever_lifted
@@ -103,14 +152,24 @@ class EpisodeCubeTracker:
         if self.is_success() and self.success_trigger_step is not None:
             self.post_success_steps += 1
 
+        # Count consecutive steps with no pick progress (cube still resting on table).
+        if not self.ever_lifted:
+            if bool(cube_on_table(env)[env_id].item()):
+                self.idle_steps += 1
+            else:
+                self.idle_steps = 0
+
     def is_success(self) -> bool:
         """True when the cube was lifted and later released on the table."""
         return self.ever_lifted and self.returned_after_lift
 
     def should_stop(self, step: int) -> bool:
-        """Stop after success tail, or when the single pick-place attempt fails."""
+        """Stop after success, idle no-progress, no pick, or failed place."""
         if self.is_success() and self.post_success_steps >= POST_SUCCESS_STEPS:
             self.stop_reason = "success"
+            return True
+        if not self.ever_lifted and self.idle_steps >= IDLE_STEPS:
+            self.stop_reason = "no_progress"
             return True
         if not self.ever_lifted and step >= MAX_APPROACH_STEPS:
             self.stop_reason = "no_pick"
@@ -222,6 +281,7 @@ def evaluate_episode_metrics(
         cube_dropped=dropped,
         episode_success=success,
         stop_reason=tracker.stop_reason,
+        cube_color=cube_color_name(env, env_id),
         cube_height=cube_h,
         cube_speed=cube_speed,
         left_gripper=left_grip,

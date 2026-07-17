@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Phase 7 — Evaluate a trained ACT policy in simulation.
+# Phase 7 — Evaluate a trained Pi0 policy in simulation.
 #
 # Uses the shared Isaac eval path (play_act.py → act_rollout.py → metrics.py).
-# Same contract as run_play_pi0.sh; only default checkpoint and output dir differ.
+# Same contract as run_play_act.sh; only default checkpoint and output dir differ.
+# Sidecar loads policy type from the checkpoint (pi0) via LeRobot config.
 #
 # Usage:
-#   ./run_play_act.sh [CHECKPOINT_DIR] [NUM_EPISODES] [FPS] [--visual]
+#   ./run_play_pi0.sh [CHECKPOINT_DIR] [NUM_EPISODES] [FPS] [--visual]
 #
 # Defaults:
-#   CHECKPOINT_DIR  ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model
+#   CHECKPOINT_DIR  ~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model
 #   NUM_EPISODES    10
 #   FPS             60  (match training/recording rate)
 #
 # Pass --visual anywhere to open the Isaac Sim GUI instead of headless mode.
 #
 # Results are written to:
-#   ~/trossen_ai_isaac/outputs/eval/act/rollout_summary.json
+#   ~/trossen_ai_isaac/outputs/eval/pi0/rollout_summary.json
 #
 # EVAL CONTRACT (see lift/mdp/metrics.py):
 #   - Success: clear lift (z > LIFT_CLEAR_Z), then released on table (cube_is_placed)
@@ -40,7 +41,7 @@ _resolve_sidecar_python() {
   echo "$HOME/lerobot_trossen/.venv/bin/python"
 }
 
-CHECKPOINT_DIR="${1:-$HOME/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model}"
+CHECKPOINT_DIR="${1:-$HOME/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model}"
 NUM_EPISODES="${2:-10}"
 shift 2 2>/dev/null || true
 
@@ -58,7 +59,7 @@ for arg in "$@"; do
 done
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
-OUTPUT_DIR="$HOME/trossen_ai_isaac/outputs/eval/act"
+OUTPUT_DIR="$HOME/trossen_ai_isaac/outputs/eval/pi0"
 SIDECAR_PYTHON="$(_resolve_sidecar_python)"
 
 if [ ! -d "$CHECKPOINT_DIR" ]; then
@@ -74,7 +75,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 echo "============================================================"
-echo "  Phase 7: ACT policy rollout"
+echo "  Phase 7: Pi0 policy rollout"
 echo "  Checkpoint : $CHECKPOINT_DIR"
 echo "  Episodes   : $NUM_EPISODES"
 echo "  FPS        : $FPS"

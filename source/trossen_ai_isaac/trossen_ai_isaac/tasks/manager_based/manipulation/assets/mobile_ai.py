@@ -77,14 +77,15 @@ MOBILE_AI_CFG = ArticulationCfg(
             "follower_left_joint_3": 0.0,
             "follower_left_joint_4": 0.0,
             "follower_left_joint_5": 0.0,
-            "follower_left_left_carriage_joint": 0.0,
+            # Open gripper (~0.044 m) matches recorded demos and eval start pose.
+            "follower_left_left_carriage_joint": 0.044,
             "follower_right_joint_0": 0.0,
             "follower_right_joint_1": 0.0,
             "follower_right_joint_2": 0.0,
             "follower_right_joint_3": 0.0,
             "follower_right_joint_4": 0.0,
             "follower_right_joint_5": 0.0,
-            "follower_right_left_carriage_joint": 0.0,
+            "follower_right_left_carriage_joint": 0.044,
         },
     ),
     # mobile_ai.usd already has stiffness, damping and effort_limit parameters

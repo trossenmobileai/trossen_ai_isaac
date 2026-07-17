@@ -17,7 +17,7 @@
   - [4.5 Simulation Scene](#45-simulation-scene)
   - [4.6 Imitation Learning Recording Pipeline](#46-imitation-learning-recording-pipeline)
   - [4.7 Repository and Branch Structure](#47-repository-and-branch-structure)
-  - [4.8 Sim ACT Evaluation](#48-sim-act-evaluation)
+  - [4.8 Sim ACT / Pi0 Evaluation](#48-sim-act--pi0-evaluation)
 - [5. Operational Procedures](#5-operational-procedures)
 - [6. Findings and Limitations](#6-findings-and-limitations)
 - [7. Troubleshooting](#7-troubleshooting)
@@ -533,7 +533,7 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 | `scripts/demos/` | Standalone Isaac Sim demos | `~/isaacsim/python.sh scripts/demos/...` |
 | `source/.../teleop/` | Teleoperation library | Imported by scripts |
 | `source/.../recording/` | LeRobot writer, frame capture | Imported by IL scripts |
-| `source/.../evaluation/` | ACT rollout, policy sidecar | Imported by `play_act.py` |
+| `source/.../evaluation/` | Policy rollout, LeRobot sidecar (ACT / Pi0) | Imported by `play_act.py` |
 | `source/.../tasks/.../mobile_ai/` | Task environment configs | Registered as gym tasks |
 
 **Branch history** (all integration work is on `main` as of PR #2 and PR #3):
@@ -550,28 +550,34 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 
 Full branch details: [IL_PIPELINE_BRANCHES.md](IL_PIPELINE_BRANCHES.md)
 
-### 4.8 Sim ACT Evaluation
+### 4.8 Sim ACT / Pi0 Evaluation
 
-Closed-loop deployment and evaluation of a trained ACT checkpoint in simulation. This is the sim equivalent of real-robot `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)).
+Closed-loop deployment and evaluation of a trained ACT or Pi0 checkpoint in simulation. This is the sim equivalent of real-robot `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)).
+
+**ACT and Pi0 share one Isaac eval path.** Both wrappers call [`play_act.py`](../scripts/imitation_learning/evaluation/play_act.py) → [`act_rollout.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) → the same metrics. The sidecar loads `act` or `pi0` from the checkpoint config. Only default checkpoint paths and output directories differ (`outputs/eval/act` vs `outputs/eval/pi0`). **Pi0 was trained but closed-loop sim eval was not completed** (Inductor compile / 120 s timeout); reporting uses ACT — see [§5.12](#512-evaluate-pi0-policy-closed-loop-rollout).
+
+**EVAL CONTRACT** (locked in [`metrics.py`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py)): FPS 60; play env timeout 90 s; start pose arms home + grippers open `0.044` + warm-up; success = clear lift then `cube_is_placed`; early stop `IDLE_STEPS=200` (`no_progress`), `MAX_APPROACH_STEPS=1000` (`no_pick`), `MAX_STEPS_AFTER_LIFT=500` (`no_place`), `POST_SUCCESS_STEPS=60` (`success`); summary includes `success_rate_by_color`.
 
 **Real robot vs sim**
 
 | Real robot | Simulation (this repo) |
 |------------|------------------------|
-| `lerobot-record --policy.path=...` | [`run_play_act.sh`](../scripts/imitation_learning/run_play_act.sh) |
+| `lerobot-record --policy.path=...` | [`run_play_act.sh`](../scripts/imitation_learning/run_play_act.sh) / [`run_play_pi0.sh`](../scripts/imitation_learning/run_play_pi0.sh) |
 | `mobileai_robot` + RealSense | `Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0` |
-| Policy in same process as robot I/O | **Sidecar**: Isaac Sim (Python 3.11) + ACT in `lerobot_train` conda (Python 3.12) |
+| Policy in same process as robot I/O | **Sidecar**: Isaac Sim (Python 3.11) + policy in `lerobot_train` conda (Python 3.12) |
 | 16D mobileai_robot actions | **7D right-arm** checkpoint when recorded with `--record_arm right` |
-| Operator observes success | Automatic metrics in `~/trossen_ai_isaac/outputs/eval/rollout_summary.json` |
+| Operator observes success | Automatic metrics in `~/trossen_ai_isaac/outputs/eval/act/` or `.../eval/pi0/` |
 
 **Architecture**
 
 1. [`play_act.py`](../scripts/imitation_learning/evaluation/play_act.py) launches Isaac Sim with the joint-position lift environment.
 2. [`act_rollout.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) spawns [`policy_sidecar.py`](../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/policy_sidecar.py) in `lerobot_train` with a **clean subprocess env** (strips Isaac `PYTHONPATH` to avoid Python version conflicts).
 3. A **single persistent TCP connection** carries `reset` / `infer` requests for the full rollout.
-4. Each step: capture 7D right-arm state + `cam_high` + `cam_right_wrist` → sidecar → 7D action → map to 14D env joint targets (left arm held at reset pose).
-5. Each step: [`EpisodeCubeTracker`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) tracks cube state. After success (clear lift then released on table), the episode runs **60 more steps** then stops early.
-6. After each episode: [`evaluate_episode_metrics`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) writes per-episode flags to `rollout_summary.json`.
+4. Each step: capture 7D right-arm state + `cam_high` + `cam_right_wrist` → sidecar → 7D action → map to 14D env joint targets (left arm held at start pose).
+5. The sidecar loads the policy type from the checkpoint (`act`, `pi0`, …) via LeRobot `PreTrainedConfig` / `get_policy_class`, then applies `make_pre_post_processors` before/after `select_action`.
+6. Each episode starts with a **forced home pose** (snap, then warm-up hold ≈ 30 steps): both arms at zero joints, both grippers open (`0.044 m`), matching recorded demos. Warm-up is not counted in episode metrics. Joint-position actions use `preserve_order=True`.
+7. Each step: [`EpisodeCubeTracker`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) tracks cube state and early-stop (idle / no_pick / no_place / success).
+8. After each episode: [`evaluate_episode_metrics`](../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/lift/mdp/metrics.py) writes per-episode flags to `rollout_summary.json`.
 
 **Success criteria**
 
@@ -592,17 +598,23 @@ Lift duration has no minimum. Return uses `cube_is_placed` (on-table + stable + 
 | `cube_on_table` | On-table stable state at final step, no gripper check (diagnostic) |
 | `cube_dropped` | Cube fell below table at final step (diagnostic) |
 | `episode_success` | `cube_lifted` and `cube_returned_after_lift` |
-| `stop_reason` | `success` (placed + 60-step tail), `no_pick` (no clear lift within ~400 steps), `no_place` (lifted but not released within ~400 steps after lift), or `env_done` (drop/timeout) |
-| `steps` | Steps taken (early stop on success or failed attempt; max ~800 on failure vs 1800 env timeout) |
+| `stop_reason` | `success` (placed + 60-step tail), `no_progress` (cube idle on table ~200 steps with no lift), `no_pick` (hard cap ~1000 steps with no lift), `no_place` (lifted but not released within ~500 steps after lift), or `env_done` (drop/timeout) |
+| `cube_color` | Spawned cube color this episode (`red` / `green` / `blue`) |
+| `steps` | Policy steps (warm-up excluded; play env timeout 90 s) |
+
+Overall summary also includes `success_rate_by_color` with per-color `{episodes, successes, success_rate}`.
 
 **Key files**
 
 | File | Role |
 |------|------|
-| `scripts/imitation_learning/run_play_act.sh` | One-command closed-loop eval |
+| `scripts/imitation_learning/run_play_act.sh` | Closed-loop ACT eval → `outputs/eval/act/` |
+| `scripts/imitation_learning/run_play_pi0.sh` | Closed-loop Pi0 eval → `outputs/eval/pi0/` (same Isaac path) |
+| `scripts/imitation_learning/run_verify_pi0_dataset.sh` | Dataset verify before Pi0 train |
+| `scripts/imitation_learning/run_train_pi0.sh` | Interactive Pi0 fine-tune (live progress) |
 | `scripts/imitation_learning/run_play_replay.sh` | Open-loop replay sanity check |
 | `source/.../evaluation/act_rollout.py` | Rollout loop + metrics |
-| `source/.../evaluation/policy_sidecar.py` | `ACTPolicy.from_pretrained` inference server |
+| `source/.../evaluation/policy_sidecar.py` | Generic LeRobot inference server (`act` / `pi0`) |
 | `source/.../lift/joint_pos_env_cfg.py` | Joint-position control env for rollout |
 
 **Prerequisites:** trained checkpoint from `lerobot_train`, same 7D right-arm layout as recording (`cam_high` + `cam_right_wrist`), task string `"Pick up the cube, lift it, and place it back on the table"`.
@@ -734,15 +746,18 @@ The script defaults to `Isaac-Reach-MobileAI-Record-Play-v0` and enables cameras
 
 ### 5.10 Evaluate ACT Policy (Closed-Loop Rollout)
 
-**Purpose:** Deploy a trained ACT checkpoint in simulation and measure pick-lift-place success ([§4.8](#48-sim-act-evaluation)).
+**Purpose:** Deploy a trained ACT checkpoint in simulation and measure pick-lift-place success ([§4.8](#48-sim-act--pi0-evaluation)).
 
 **Preflight — verify checkpoint loads:**
 
 ```bash
 conda run -n lerobot_train python -c "
-from lerobot.policies.act.modeling_act import ACTPolicy
-ACTPolicy.from_pretrained('~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model')
-print('OK')
+from lerobot.policies.factory import get_policy_class
+from lerobot.configs.policies import PreTrainedConfig
+path = '~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model'
+cfg = PreTrainedConfig.from_pretrained(path)
+get_policy_class(cfg.type).from_pretrained(path)
+print('OK', cfg.type)
 "
 ```
 
@@ -761,22 +776,69 @@ cd ~/trossen_ai_isaac
 ./scripts/imitation_learning/run_play_act.sh
 ```
 
-With explicit checkpoint, episode count, and FPS (default 60 to match recording):
+With explicit checkpoint, episode count, and FPS (default 60 to match recording). For the reporting eval, use **30 episodes**:
 
 ```bash
 ./scripts/imitation_learning/run_play_act.sh \
   ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
-  10 60
+  30 60
 ```
 
 Add `--visual` anywhere to watch in the Isaac Sim GUI instead of headless mode.
 
 **Expected result:**
 
-- Sidecar prints `[OK] ACT sidecar listening on 127.0.0.1:5555`
-- Per-episode lines: `[EP 1/10] success=... lifted=... returned=... on_table=... stop=... steps=...`
-- Summary written to `~/trossen_ai_isaac/outputs/eval/rollout_summary.json`
-- Successful episodes stop ~60 steps after release; failed attempts stop after one try (~400 steps without pick, or ~400 steps after lift without release) instead of the full 30 s env timeout
+- Sidecar prints `[OK] act sidecar listening on 127.0.0.1:5555` (policy type from checkpoint)
+- Per-episode lines: `[EP 1/30] success=... color=... lifted=... returned=... on_table=... stop=... steps=...`
+- Summary written to `~/trossen_ai_isaac/outputs/eval/act/rollout_summary.json` (overall + `success_rate_by_color`)
+- Early stop (EVAL CONTRACT): `IDLE_STEPS=200` → `no_progress`; `MAX_APPROACH_STEPS=1000` → `no_pick`; `MAX_STEPS_AFTER_LIFT=500` → `no_place`; `POST_SUCCESS_STEPS=60` → `success`. Play env timeout is **90 s**.
+
+### 5.11 Verify Pi0 Dataset and Train Pi0 (Manual)
+
+**Purpose:** Verify the right-arm pick-place dataset, then fine-tune π₀ from `lerobot/pi0_base` with a **visible progress bar**. Run these yourself in a terminal (do not background the train command).
+
+**Verify:**
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_verify_pi0_dataset.sh
+```
+
+**Train (interactive, live tqdm):**
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_train_pi0.sh
+```
+
+The wrapper uses `conda run --no-capture-output` so LeRobot’s progress bar streams to the terminal. First run downloads `lerobot/pi0_base`. Checkpoints land under `~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/`.
+
+**Resume if interrupted:**
+
+```bash
+conda run --no-capture-output -n lerobot_train lerobot-train \
+  --config_path ~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model/train_config.json \
+  --resume=true
+```
+
+**Expected result:** Verify passes; training completes 10 000 steps with periodic checkpoints (`save_freq=1000`).
+
+### 5.12 Evaluate Pi0 Policy (Closed-Loop Rollout)
+
+**Purpose:** Deploy a fine-tuned Pi0 checkpoint with the same Isaac-side observation capture and 7D→14D action mapping as ACT ([§4.8](#48-sim-act--pi0-evaluation)).
+
+**Status — trained, sim eval not completed.** Pi0 training finished (`pi0_mobile_ai_right_v2`). Closed-loop eval was blocked: the first sidecar `select_action` triggers Torch Inductor / Triton AUTOTUNE, which exceeded the Isaac client’s **120 s** socket timeout (`[FAIL] timed out`); no episodes finished. Left unfixed due to time constraints. **Reporting eval uses ACT only** ([§5.10](#510-evaluate-act-policy-closed-loop-rollout), 30 episodes). Revisit later by raising the client timeout, warming up compile before the rollout loop, and/or disabling `torch.compile` for Pi0 eval.
+
+Wrapper (same Isaac path as ACT; not used for the current report):
+
+```bash
+cd ~/trossen_ai_isaac
+./scripts/imitation_learning/run_play_pi0.sh \
+  ~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model \
+  10 60
+```
+
+**Expected result (once unblocked):** Same EVAL CONTRACT and metrics fields as [§5.10](#510-evaluate-act-policy-closed-loop-rollout); summary at `~/trossen_ai_isaac/outputs/eval/pi0/rollout_summary.json`; sidecar prints `[OK] pi0 sidecar listening on ...`.
 
 ---
 
@@ -797,10 +859,11 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 ### 6.3 Current Limitations
 
 - **No Mobile AI RL/PPO** unlike stock WXAI reach, lift, and cabinet tasks
-- **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment (wrapper: `run_verify_and_train.sh`)
+- **Training smoke only in-repo:** full ACT training runs in the external `lerobot_train` environment (wrapper: `run_verify_and_train.sh`); Pi0 uses separate `run_verify_pi0_dataset.sh` + `run_train_pi0.sh`
 - **VR recording hardware validation pending:** `record_dual_arm_vr.py` is implemented; headset-on-workstation confirmation of camera quality and XR compatibility is still required ([Epic 4 §6.3](EPIC4_VR_INTEGRATION.md#63-current-limitations))
 - **Sim eval is metrics-only:** closed-loop rollout reports success metrics; it does not write an `eval_*` LeRobot dataset like optional real-robot recording
-- **Sim eval uses one pick-place attempt per episode:** early stop on success (+60 steps) or failure (`no_pick` / `no_place` within ~400 steps); see [§4.8](#48-sim-act-evaluation)
+- **Sim eval early-stop (locked):** idle `no_progress` (200), approach hard-cap `no_pick` (1000), place window `no_place` (500 after lift), success tail (60); ACT and Pi0 share this path with separate `outputs/eval/act` vs `outputs/eval/pi0` — see [§4.8](#48-sim-act--pi0-evaluation)
+- **Pi0 sim eval blocked:** checkpoint trained, but first-step Inductor/Triton AUTOTUNE exceeded the 120 s sidecar client timeout; deferred — reporting uses ACT 30-episode eval ([§5.12](#512-evaluate-pi0-policy-closed-loop-rollout))
 - **Reach task has no automated success metrics:** the Reach *recording* scene is an IL sandbox; the separate *Lift* joint-position env used for ACT rollout does have lift/place metrics
 
 ---
@@ -815,14 +878,16 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 | `ImportError: lerobot` during recording | LeRobot not in Isaac Sim Python | Install via `isaaclab.sh -p -m pip install lerobot==0.4.4` |
 | Verify script fails | Wrong Python interpreter | Use `~/lerobot_trossen/.venv/bin/python` |
 | Dataset incomplete after Ctrl+C | Interrupt before finalize | Wait for "dataset finalized" log; script handles SIGINT |
-| `SRE module mismatch` in sidecar | Sidecar inherited Isaac `PYTHONPATH` | Fixed: sidecar subprocess uses clean env ([§4.8](#48-sim-act-evaluation)) |
+| `SRE module mismatch` in sidecar | Sidecar inherited Isaac `PYTHONPATH` | Fixed: sidecar subprocess uses clean env ([§4.8](#48-sim-act--pi0-evaluation)) |
 | `BrokenPipeError` / connection reset during eval | Probe connection closed sidecar session | Fixed: single persistent TCP connect in `act_rollout.py` |
-| `PreTrainedPolicy` abstract class error | Wrong policy loader in sidecar | Use `ACTPolicy.from_pretrained` via current `policy_sidecar.py` |
+| `PreTrainedPolicy` abstract class error | Wrong policy loader in sidecar | Use current `policy_sidecar.py` (`PreTrainedConfig` + `get_policy_class`) |
 | Eval policy moves wrong arm | Checkpoint not 7D right-arm | Record/retrain with `--record_arm right` |
-| Visual success but `success=False` | Gripper closed while cube in height band | Return requires `cube_is_placed` (open gripper + on-table); see [§4.8](#48-sim-act-evaluation) |
+| Visual success but `success=False` | Gripper closed while cube in height band | Return requires `cube_is_placed` (open gripper + on-table); see [§4.8](#48-sim-act--pi0-evaluation) |
 | `success=True` but cube still gripped | Old height-only return detection | Fixed: release requires open gripper |
-| Eval runs full 30 s on failure | No failure early-stop | Fixed: `stop_reason=no_pick` or `no_place` ends episode after one attempt |
+| Eval runs full timeout on failure | No failure early-stop | Fixed: idle / approach / place caps (`IDLE_STEPS`, `MAX_APPROACH_STEPS`, `MAX_STEPS_AFTER_LIFT`) |
 | `success=True` at ~60 steps during approach | Lift/on-table threshold overlap | Fixed: clear lift requires `z > 0.845 m` before return counts |
+| Gripper closed at start of next episode | Joint targets carried over after reset | Fixed: eval forces home pose + open grippers after every `env.reset()` |
+| Pi0 eval `[FAIL] timed out` on first step; Triton `AUTOTUNE` spam | First Pi0 `select_action` compiles via Torch Inductor (>120 s client timeout) | Deferred: raise timeout / warmup compile / disable compile; see [§5.12](#512-evaluate-pi0-policy-closed-loop-rollout) |
 
 ### Simulation and physics issues
 
@@ -846,11 +911,14 @@ With early **IK-Rel** control, both arms drifted slowly even when sending zero a
 - [x] [LeRobot recording pipeline](#46-imitation-learning-recording-pipeline) (keyboard/gamepad)
 - [x] [VR + LeRobot recording](#59-recording--vr-demonstrations) → [Epic 4](EPIC4_VR_INTEGRATION.md)
 - [x] [Dataset validation and ACT training smoke](#57-verify-dataset)
-- [x] Sim ACT policy evaluation (closed-loop rollout + metrics) → [§4.8](#48-sim-act-evaluation)
+- [x] Sim ACT policy evaluation (closed-loop rollout + metrics) → [§4.8](#48-sim-act--pi0-evaluation)
+- [x] Pi0 verify / train wrappers (`run_verify_pi0_dataset.sh`, `run_train_pi0.sh`); eval wrapper exists but sim Pi0 rollout not completed → [§5.11](#511-verify-pi0-dataset-and-train-pi0-manual), [§5.12](#512-evaluate-pi0-policy-closed-loop-rollout)
 
 ### Planned or in progress
 
-- [ ] Full policy training workflow documentation in-repo (wrapper exists: `run_verify_and_train.sh`)
+- [ ] ACT reporting eval: 30 closed-loop episodes (`run_play_act.sh … 30 60`) → [§5.10](#510-evaluate-act-policy-closed-loop-rollout)
+- [ ] Unblock Pi0 sim eval (Inductor compile / 120 s timeout) → [§5.12](#512-evaluate-pi0-policy-closed-loop-rollout)
+- [ ] Full ACT policy training workflow documentation in-repo (wrapper exists: `run_verify_and_train.sh`)
 - [ ] Sim-to-real deployment on physical Mobile AI
 - [ ] Mobile AI reinforcement learning tasks
 - [ ] Task success metrics and manipulation goals beyond the recording sandbox

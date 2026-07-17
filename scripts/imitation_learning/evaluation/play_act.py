@@ -26,11 +26,12 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Evaluate a trained ACT policy in the Mobile AI lift simulation.
+"""Evaluate a trained LeRobot policy (ACT or Pi0) in the Mobile AI lift simulation.
 
-Default configuration targets the 7D right-arm checkpoint produced by the
-single-arm VR recording pipeline (``--record_arm right``).  The policy
-sidecar is launched automatically in the LeRobot Python environment.
+Shared entry for ``run_play_act.sh`` and ``run_play_pi0.sh``. Default configuration
+targets the 7D right-arm checkpoint from ``--record_arm right``. The policy
+sidecar is launched automatically in the LeRobot Python environment and loads
+the checkpoint type from config (``act``, ``pi0``, …).
 """
 
 import argparse
@@ -40,7 +41,9 @@ from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(description="Roll out an ACT policy in the Mobile AI lift sim.")
+parser = argparse.ArgumentParser(
+    description="Roll out an ACT or Pi0 policy in the Mobile AI lift sim (shared eval entry)."
+)
 parser.add_argument(
     "--task",
     type=str,
@@ -60,7 +63,7 @@ parser.add_argument(
     "--sidecar-python",
     type=str,
     default="~/lerobot_trossen/.venv/bin/python",
-    help="Python executable for ACT inference (prefer lerobot_train conda env).",
+    help="Python executable for policy inference (prefer lerobot_train conda env).",
 )
 parser.add_argument("--sidecar-host", type=str, default="127.0.0.1")
 parser.add_argument("--sidecar-port", type=int, default=5555)

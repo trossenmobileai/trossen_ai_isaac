@@ -274,7 +274,7 @@ WXAI teleoperation for data collection:
 
 ## Imitation Learning Pipeline
 
-End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT training.
+End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT / Pi0 training.
 
 | Step | Script | Requires |
 |------|--------|----------|
@@ -285,9 +285,12 @@ End-to-end flow for Mobile AI sim demonstrations → LeRobot v3 datasets → ACT
 | Merge VR shards (multi-session) | `scripts/imitation_learning/recording/merge_datasets.py` | LeRobot venv |
 | Verify | `scripts/imitation_learning/validation/verify_dataset.py` | LeRobot venv (PyAV) |
 | Train ACT | `scripts/imitation_learning/run_verify_and_train.sh` | `lerobot_train` conda |
+| Verify Pi0 dataset | `scripts/imitation_learning/run_verify_pi0_dataset.sh` | LeRobot venv (PyAV) |
+| Train Pi0 (manual, live progress) | `scripts/imitation_learning/run_train_pi0.sh` | `lerobot_train` conda |
 | Train smoke | `scripts/imitation_learning/training/smoke_train_act.py` | `lerobot_train` conda |
 | Replay episode (open-loop) | `scripts/imitation_learning/run_play_replay.sh` | Isaac Sim |
 | Evaluate ACT policy | `scripts/imitation_learning/run_play_act.sh` | Isaac Sim + `lerobot_train` conda |
+| Evaluate Pi0 policy | `scripts/imitation_learning/run_play_pi0.sh` | Isaac Sim + `lerobot_train` conda |
 
 ```bash
 # Record demonstrations — keyboard/gamepad (N=toggle episode, M=discard, R=reset)
@@ -329,26 +332,39 @@ python scripts/imitation_learning/training/smoke_train_act.py \
 # Full ACT training + verify (see scripts/imitation_learning/run_verify_and_train.sh)
 ./scripts/imitation_learning/run_verify_and_train.sh
 
+# Pi0 — verify dataset, then train interactively (live progress bar; do not background)
+./scripts/imitation_learning/run_verify_pi0_dataset.sh
+./scripts/imitation_learning/run_train_pi0.sh
+# Resume Pi0 if interrupted:
+# conda run --no-capture-output -n lerobot_train lerobot-train \
+#   --config_path ~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2/checkpoints/last/pretrained_model/train_config.json \
+#   --resume=true
+
 # Phase A — open-loop replay sanity check (episode 0, 60 fps)
 ./scripts/imitation_learning/run_play_replay.sh \
     ~/lerobot_trossen/datasets/my_dataset/merged 0
 
-# Phase B — closed-loop ACT evaluation (10 episodes, metrics in rollout_summary.json)
+# Phase B — closed-loop ACT evaluation (reporting run: 30 episodes)
 # Success: clear lift (z > 0.845 m) then release on table (height + open gripper).
-# Episodes stop early on success (+60 steps) or after one failed attempt (~400 steps).
+# Early stop: idle 200 (no_progress), approach 1000 (no_pick), place 500 after lift (no_place),
+# success +60 steps. Metrics include success_rate_by_color.
+# → ~/trossen_ai_isaac/outputs/eval/act/rollout_summary.json
 ./scripts/imitation_learning/run_play_act.sh \
     ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
-    10 60
+    30 60
 
-# Visual rollout (omit headless)
+# Visual smoke (omit headless)
 ./scripts/imitation_learning/run_play_act.sh \
     ~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2/checkpoints/last/pretrained_model \
     1 --visual
+
+# Pi0: trained, but sim eval deferred (first-step Torch Inductor AUTOTUNE exceeds 120 s
+# sidecar timeout). Wrapper: run_play_pi0.sh → outputs/eval/pi0/. See EPIC3 §5.12.
 ```
 
-Real-robot equivalent: `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)). Sim uses a sidecar process for ACT inference because Isaac Sim and LeRobot run on different Python versions.
+Real-robot equivalent: `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)). Sim uses a sidecar process for policy inference because Isaac Sim and LeRobot run on different Python versions. ACT and Pi0 share one Isaac eval path (`play_act.py` → `act_rollout.py`); the sidecar loads the policy type from the checkpoint (`act` or `pi0`) and applies LeRobot pre/post-processors. **Reporting eval is ACT-only (30 episodes)** until Pi0 compile/timeout is unblocked.
 
-See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details. See [docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) §4.8 for sim ACT evaluation architecture and troubleshooting.
+See [docs/IL_PIPELINE_BRANCHES.md](docs/IL_PIPELINE_BRANCHES.md) for branch history and folder glossary. See [docs/EPIC4_VR_INTEGRATION.md](docs/EPIC4_VR_INTEGRATION.md) for VR recording setup and multi-session workflow details. See [docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) §4.8 for sim ACT / Pi0 evaluation architecture and troubleshooting.
 
 ### Leader Arm Teleoperation
 
