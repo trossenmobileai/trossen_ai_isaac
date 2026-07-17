@@ -35,7 +35,6 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.devices import DevicesCfg
 from isaaclab.devices.gamepad import Se3GamepadCfg
 from isaaclab.devices.keyboard import Se3KeyboardCfg
-from isaaclab.devices.spacemouse import Se3SpaceMouseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab.managers import ActionTermCfg as ActionTerm
@@ -318,10 +317,6 @@ class MobileAIReachEnvCfg(ManagerBasedRLEnvCfg):
                     rot_sensitivity=0.8,
                 ),
                 "gamepad": Se3GamepadCfg(
-                    gripper_term=False,
-                    sim_device=self.sim.device,
-                ),
-                "spacemouse": Se3SpaceMouseCfg(
                     gripper_term=False,
                     sim_device=self.sim.device,
                 ),

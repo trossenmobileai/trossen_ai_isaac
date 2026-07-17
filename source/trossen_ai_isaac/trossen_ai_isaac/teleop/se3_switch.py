@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 import carb
 import omni.appwindow
 import torch
-from isaaclab.devices import Se3Gamepad, Se3GamepadCfg, Se3Keyboard, Se3KeyboardCfg, Se3SpaceMouse, Se3SpaceMouseCfg
+from isaaclab.devices import Se3Gamepad, Se3GamepadCfg, Se3Keyboard, Se3KeyboardCfg
 from isaaclab.devices.teleop_device_factory import create_teleop_device
 from isaaclab.utils.math import normalize, quat_from_angle_axis, quat_mul
 
@@ -105,7 +105,7 @@ def build_se3_device(
     env_cfg: Any,
     keyboard_callbacks: dict[str, Callable[[], None]],
 ):
-    """Create the Se3 teleop device (keyboard, gamepad, or spacemouse)."""
+    """Create the Se3 teleop device (keyboard or gamepad)."""
     sensitivity = args.sensitivity
     is_gamepad = args.teleop_device.lower() == "gamepad"
 
@@ -139,21 +139,6 @@ def build_se3_device(
                 rot_sensitivity=0.1 * sensitivity,
             )
         )
-
-    if device_name == "spacemouse":
-        teleop_interface = Se3SpaceMouse(
-            Se3SpaceMouseCfg(
-                gripper_term=False,
-                pos_sensitivity=0.05 * sensitivity,
-                rot_sensitivity=0.05 * sensitivity,
-            )
-        )
-        for key, cb in keyboard_callbacks.items():
-            try:
-                teleop_interface.add_callback(key, cb)
-            except (ValueError, TypeError) as exc:
-                logger.warning("Could not bind '%s': %s", key, exc)
-        return teleop_interface
 
     raise ValueError(f"Unsupported teleop device: {args.teleop_device}")
 
@@ -265,7 +250,7 @@ def run_se3_switch_loop(
         print("[TELEOP] Deactivated")
 
     keyboard_callbacks: dict[str, Callable[[], None]] = {
-        "R": reset_env,
+        "J": reset_env,
         "START": start_teleop,
         "STOP": stop_teleop,
         "RESET": reset_env,
@@ -286,7 +271,7 @@ def run_se3_switch_loop(
 
     arm_switch_key_desc = "(none)"
     gripper_key_desc = "(none)"
-    reset_key_desc = "R key"
+    reset_key_desc = "J key"
     try:
         if isinstance(teleop_interface, Se3Keyboard):
             teleop_interface.add_callback("TAB", toggle_arm)
@@ -300,11 +285,6 @@ def run_se3_switch_loop(
             arm_switch_key_desc = "Y button (polled)"
             gripper_key_desc = "A button (polled)"
             reset_key_desc = "B button (polled)"
-        elif isinstance(teleop_interface, Se3SpaceMouse):
-            teleop_interface.add_callback("L", toggle_gripper)
-            gripper_key_desc = "Left button"
-            arm_switch_key_desc = "(not available on SpaceMouse)"
-            reset_key_desc = "Right button"
     except Exception as exc:
         logger.warning("Could not bind arm-switch/gripper controls: %s", exc)
 
@@ -329,7 +309,7 @@ def run_se3_switch_loop(
     print(f"  Gripper:     {gripper_key_desc}  (toggles active arm open/close)")
     print(f"  Reset:       {reset_key_desc}")
     if recorder is not None:
-        print("  Recording:   N=toggle episode (start/save+reset)  M=discard  R=reset")
+        print("  Recording:   N=toggle episode (start/save+reset)  M=discard  J=reset")
         print(f"  Dataset:     {recorder.dataset_root}")
     print(f"  Pos scale:   {POS_SCALE}  (tune with --sensitivity)")
     print("=" * 60)

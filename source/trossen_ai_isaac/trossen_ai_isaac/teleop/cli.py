@@ -40,7 +40,7 @@ def add_mobile_ai_teleop_args(parser: argparse.ArgumentParser) -> None:
         "--teleop_device",
         type=str,
         default="keyboard",
-        help="Teleop device: keyboard, gamepad, or spacemouse.",
+        help="Teleop device: keyboard or gamepad.",
     )
     parser.add_argument(
         "--task",

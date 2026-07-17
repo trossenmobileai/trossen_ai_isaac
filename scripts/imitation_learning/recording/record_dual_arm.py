@@ -31,7 +31,7 @@
 Recording controls (keyboard):
     N  — toggle episode recording (start / save + reset arms)
     M  — discard current episode buffer without saving
-    R  — reset environment (discards in-progress recording)
+    J  — reset environment (discards in-progress recording)
 """
 
 import argparse

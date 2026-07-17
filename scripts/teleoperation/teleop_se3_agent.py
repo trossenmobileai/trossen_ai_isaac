@@ -185,7 +185,7 @@ def main() -> None:
 
     # Create device config if not already in env_cfg
     teleoperation_callbacks: dict[str, Callable[[], None]] = {
-        "R": reset_recording_instance,
+        "J": reset_recording_instance,
         "START": start_teleoperation,
         "STOP": stop_teleoperation,
         "RESET": reset_recording_instance,
@@ -269,7 +269,7 @@ def main() -> None:
     env.reset()
     teleop_interface.reset()
 
-    print("Teleoperation started. Press 'R' to reset the environment.")
+    print("Teleoperation started. Press 'J' to reset the environment.")
 
     # simulate environment
     while simulation_app.is_running():

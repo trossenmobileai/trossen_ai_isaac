@@ -26,7 +26,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""LeRobot feature schema aligned with ``trossen_ai_2026_project``."""
+"""LeRobot feature schema aligned with LeRobot Dataset v3.0."""
 
 from __future__ import annotations
 
