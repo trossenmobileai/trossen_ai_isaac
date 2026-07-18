@@ -424,7 +424,10 @@ def run_vr_recording_loop(
         # delta accumulated while teleop was paused.
         anchor_captured = False
         if was_active:
-            print("[TELEOP] Deactivated (robot holds last pose; press B then U to re-engage)")
+            engage_key = "U" if recorder is not None else "N"
+            print(
+                f"[TELEOP] Deactivated (robot holds last pose; press B then {engage_key} to re-engage)"
+            )
 
     def reanchor() -> None:
         nonlocal anchor_captured, filt_pose_l, filt_pose_r
@@ -636,6 +639,10 @@ def run_vr_recording_loop(
     else:
         print("  Pinch latch: disabled (--pinch_hold_dist 0)")
     print(f"  Markers:     {'on (EE goals + hand keypoints)' if show_markers else 'off'}")
+    if getattr(args_cli, "step_log", False):
+        print("  Step log:    on (every 60 steps)")
+    else:
+        print("  Step log:    off (pass --step_log to enable every-60-step status)")
     switch_hint = "  TAB=switch arm" if (single_arm and not lock_active_arm) else ""
     if keyboard_interface is not None and recorder is None:
         print(f"  Keys:        N=start  M=pause  B=re-anchor  J=reset{switch_hint}  (workstation keyboard)")
@@ -944,7 +951,7 @@ def run_vr_recording_loop(
                 if show_markers:
                     _draw_debug_markers(target_pose)
 
-                if step_count % 60 == 0:
+                if getattr(args_cli, "step_log", False) and step_count % 60 == 0:
                     l_pos = pose_part[:3].tolist()
                     r_pos = pose_part[7:10].tolist()
                     if not warmup_complete:

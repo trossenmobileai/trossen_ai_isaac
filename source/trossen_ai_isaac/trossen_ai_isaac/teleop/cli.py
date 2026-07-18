@@ -55,6 +55,14 @@ def add_mobile_ai_teleop_args(parser: argparse.ArgumentParser) -> None:
         default=0.15,
         help="Per-axis dead zone for gamepad stick drift (default 0.15).",
     )
+    parser.add_argument(
+        "--step_log",
+        action="store_true",
+        help=(
+            "Print a status line every 60 sim steps ([step=...] with arm / grip / pose). "
+            "Off by default so key-event logs stay readable."
+        ),
+    )
 
 
 def add_record_args(parser: argparse.ArgumentParser) -> None:

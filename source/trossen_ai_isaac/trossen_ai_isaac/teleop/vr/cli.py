@@ -207,6 +207,14 @@ def add_vr_teleop_args(parser: argparse.ArgumentParser) -> None:
             "stability. Set 0.0 to disable entirely. Default: 0.5."
         ),
     )
+    parser.add_argument(
+        "--step_log",
+        action="store_true",
+        help=(
+            "Print a status line every 60 sim steps ([VR step=...] with hand pose / grip / REC). "
+            "Off by default so key-event logs stay readable."
+        ),
+    )
 
 
 def add_vr_camera_args(parser: argparse.ArgumentParser) -> None:

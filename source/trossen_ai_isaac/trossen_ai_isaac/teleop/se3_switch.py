@@ -358,7 +358,7 @@ def run_se3_switch_loop(
                 )
                 actions = broadcast_action(action_1d, env.num_envs)
 
-                if step_count % 60 == 0:
+                if getattr(args, "step_log", False) and step_count % 60 == 0:
                     l_grip = "OPEN" if state.grip[LEFT_ARM] > 0 else "CLOSE"
                     r_grip = "OPEN" if state.grip[RIGHT_ARM] > 0 else "CLOSE"
                     l_pos = [f"{v:+.3f}" for v in state.target_pos[LEFT_ARM].tolist()]
