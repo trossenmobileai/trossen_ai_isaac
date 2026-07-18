@@ -25,6 +25,8 @@ At a high level the loop is: a **human** drives a **teleop or recording script**
 
 ## Installation and Initial Validation
 
+**First-time install (procedural):** [Isaac Sim, Lab, and environments](../setup/isaac-and-environments.md) · [setup hub](../setup/README.md). Day-to-day checks: [runbook §0](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites).
+
 The team followed the [Trossen AI Isaac installation guide](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html), then forked upstream for Mobile AI work:
 
 | Repository | Role |
@@ -32,9 +34,9 @@ The team followed the [Trossen AI Isaac installation guide](https://docs.trossen
 | [TrossenRobotics/trossen_ai_isaac](https://github.com/TrossenRobotics/trossen_ai_isaac) | Upstream (reference and baseline) |
 | [trossenmobileai/trossen_ai_isaac](https://github.com/trossenmobileai/trossen_ai_isaac) | Project fork (all Mobile AI extensions) |
 
-**Prerequisites:** Ubuntu 22.04, Isaac Lab 2.3.0 / Isaac Sim 5.1.0 (see [docs index — Environment](../README.md#environment)). Copy-paste install / `list_envs` / bringup: [IL cheat sheet §0](../IL_WORKFLOW_CHEATSHEET.md#0-prerequisites).
+**Environment versions:** see [docs index — Environment](../README.md#environment).
 
-After installing the extension editable (`pip install -e source/trossen_ai_isaac`), confirm these Mobile AI gym IDs appear:
+After the extension is installed editable, these Mobile AI gym IDs should appear (full install steps in [setup](../setup/isaac-and-environments.md)):
 
 - `Isaac-Reach-MobileAI-IK-Abs-Play-v0`
 - `Isaac-Reach-MobileAI-Record-Play-v0`
@@ -142,12 +144,12 @@ Essential scene and robot wiring:
 
 #### ik_abs_env_cfg.py: absolute IK teleoperation
 
-This file is **central to Epic 3 teleoperation**. The registered task `Isaac-Reach-MobileAI-IK-Abs-Play-v0` points at `MobileAIReachEnvCfg_IK_ABS_PLAY` defined here: the environment that [`teleop_dual_arm_switch.py`](../IL_WORKFLOW_CHEATSHEET.md) launches. It inherits the scene and MDP skeleton from [`reach_env_cfg.py`](#reach_env_cfgpy-scene-and-mdp-base) and overrides the action layer for **absolute** inverse kinematics.
+This file is **central to Epic 3 teleoperation**. The registered task `Isaac-Reach-MobileAI-IK-Abs-Play-v0` points at `MobileAIReachEnvCfg_IK_ABS_PLAY` defined here: the environment that [`teleop_dual_arm_switch.py`](../IL_WORKFLOW_RUNBOOK.md) launches. It inherits the scene and MDP skeleton from [`reach_env_cfg.py`](#reach_env_cfgpy-scene-and-mdp-base) and overrides the action layer for **absolute** inverse kinematics.
 
 - **`MobileAIReachEnvCfg_IK_ABS`**: Flips both arm action terms from relative deltas (base config) to absolute pose commands (`use_relative_mode=False`). Each arm expects a 7D pose `[pos_xyz, quat_wxyz]` in the robot base frame. Adds binary gripper actions on both carriage joints, producing a **16D** environment action vector: `[L_pose(7), R_pose(7), L_grip(1), R_grip(1)]`.
 - **`MobileAIReachEnvCfg_IK_ABS_PLAY`**: Play/teleoperation entry point: single environment, observation noise off. Registered as `Isaac-Reach-MobileAI-IK-Abs-Play-v0`.
 
-The file also registers an OpenXR **`handtracking`** teleoperation device for VR. Keyboard and gamepad teleoperation ignore this; see [VR teleoperation](../epic4/04-vr-teleoperation.md).
+The file also registers an OpenXR **`handtracking`** teleoperation device for VR. Keyboard and gamepad teleoperation ignore this; see [VR teleoperation](../epic4/03-vr-teleoperation.md).
 
 Essential action wiring:
 
@@ -157,7 +159,7 @@ The teleoperation library ([`se3_switch.py`](03-teleoperation.md)) assembles the
 
 #### record_env_cfg.py: IL recording
 
-This file defines the environment for [LeRobot dataset collection](04-recording-lerobot.md). The registered task `Isaac-Reach-MobileAI-Record-Play-v0` points at `MobileAIReachEnvCfg_RECORD_PLAY`, launched by [`record_dual_arm_vr.py`](../IL_WORKFLOW_CHEATSHEET.md#1-collect-demos--vr-production) or [`record_dual_arm.py`](../IL_WORKFLOW_CHEATSHEET.md#2-collect-demos--keyboard--gamepad-alternate). It inherits absolute IK and grippers from [`MobileAIReachEnvCfg_IK_ABS_PLAY`](#ik_abs_env_cfgpy-absolute-ik-teleoperation) and retargets observations and sensors for a [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) feature schema.
+This file defines the environment for [LeRobot dataset collection](04-recording-lerobot.md). The registered task `Isaac-Reach-MobileAI-Record-Play-v0` points at `MobileAIReachEnvCfg_RECORD_PLAY`, launched by [`record_dual_arm_vr.py`](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) or [`record_dual_arm.py`](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate). It inherits absolute IK and grippers from [`MobileAIReachEnvCfg_IK_ABS_PLAY`](#ik_abs_env_cfgpy-absolute-ik-teleoperation) and retargets observations and sensors for a [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) feature schema.
 
 - **`MobileAIRecordSceneCfg`**: Extends `MobileAIReachSceneCfg` with three RGB camera sensors (`cam_high`, `cam_left_wrist`, `cam_right_wrist`) at 480×640, bound to existing USD camera prims on the robot.
 - **`RecordObservationsCfg`**: Replaces the reach-task policy observations with a single **14D absolute joint position** vector (7 joints per follower arm), matching the real-robot LeRobot layout. No pose commands or velocity noise.
@@ -174,8 +176,8 @@ Commanded joint position targets captured at each step become the dataset `actio
 
 | Task ID | Config class | Launched by |
 |---------|--------------|-------------|
-| `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | `MobileAIReachEnvCfg_IK_ABS_PLAY` | [`teleop_dual_arm_switch.py`](../IL_WORKFLOW_CHEATSHEET.md), [`teleop_dual_arm_vr.py`](../epic4/04-vr-teleoperation.md) |
-| `Isaac-Reach-MobileAI-Record-Play-v0` | `MobileAIReachEnvCfg_RECORD_PLAY` | [`record_dual_arm_vr.py`](../IL_WORKFLOW_CHEATSHEET.md#1-collect-demos--vr-production), [`record_dual_arm.py`](../IL_WORKFLOW_CHEATSHEET.md#2-collect-demos--keyboard--gamepad-alternate) |
+| `Isaac-Reach-MobileAI-IK-Abs-Play-v0` | `MobileAIReachEnvCfg_IK_ABS_PLAY` | [`teleop_dual_arm_switch.py`](../IL_WORKFLOW_RUNBOOK.md), [`teleop_dual_arm_vr.py`](../epic4/03-vr-teleoperation.md) |
+| `Isaac-Reach-MobileAI-Record-Play-v0` | `MobileAIReachEnvCfg_RECORD_PLAY` | [`record_dual_arm_vr.py`](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr), [`record_dual_arm.py`](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate) |
 
 (Closed-loop eval uses `Isaac-Lift-Cube-MobileAI-Joint-Pos-Play-v0` — same pick-and-place scene, joint-position actions; see [Evaluation](06-evaluation.md). Naming history: [Custom Reach Task](#custom-reach-task-environment).)
 
@@ -192,26 +194,27 @@ The pick-and-place digital twin is assembled in [`reach_env_cfg.py`](../../sourc
 > ![Mobile AI pick-and-place scene (placeholder)](../assets/epic3/mobile-ai-pick-place-scene.png)
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart TB
-  subgraph scene [MobileAIReachSceneCfg]
-    Ground["Ground plane"]
-    Light["Dome light"]
-    Table["Table cuboid"]
-    Cube["Cube 3cm"]
-    Robot["Mobile AI USD fix_root_link"]
+ subgraph scene["MobileAIReachSceneCfg"]
+        Ground["Ground plane"]
+        Light["Dome light"]
+        Table["Table cuboid"]
+        Cube["Cube 3cm"]
+        Robot["Mobile AI USD fix_root_link"]
   end
-  subgraph recordCams [Record scene only]
-    CamH["cam_high"]
-    CamL["cam_left_wrist"]
-    CamR["cam_right_wrist"]
+ subgraph recordCams["Record scene only"]
+        CamH["cam_high"]
+        CamL["cam_left_wrist"]
+        CamR["cam_right_wrist"]
   end
-  Ground --- Table
-  Table --- Cube
-  Robot --- Table
-  Light --- scene
-  Robot -.-> CamH
-  Robot -.-> CamL
-  Robot -.-> CamR
+    Ground --- Table
+    Table --- Cube
+    Robot --- Table
+    Robot -.-> CamH & CamL & CamR
 ```
 
 #### Scene assets (`MobileAIReachSceneCfg`)
@@ -249,6 +252,13 @@ Code-level overview of the same classes: [`reach_env_cfg.py`](#reach_env_cfgpy-s
 
 ## How to run
 
-Commands live in the [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md) (verify envs, visualize robot). Install notes above; do not duplicate CLI recipes here.
+- First-time install: [setup — Isaac and environments](../setup/isaac-and-environments.md)
+- Confirm envs: [runbook §0](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
+- Full day-to-day pipeline: [§0](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)–[§7](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [One-time setup](../setup/README.md)
+- [§0 Prerequisites](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
+- [Teleoperation](03-teleoperation.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

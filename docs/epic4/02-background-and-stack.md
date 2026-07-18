@@ -19,7 +19,7 @@ flowchart TB
   IK --> TaskEnv
 ```
 
-The VR control loop matches Epic 3's teleoperation loop (`input → 16D action → env.step()`), with OpenXR hand tracking as the input source. See [Teleoperation (Epic 3)](../epic3/03-teleoperation.md) and [VR teleoperation](04-vr-teleoperation.md).
+The VR control loop matches Epic 3's teleoperation loop (`input → 16D action → env.step()`), with OpenXR hand tracking as the input source. See [Teleoperation (Epic 3)](../epic3/03-teleoperation.md) and [VR teleoperation](03-vr-teleoperation.md).
 
 ## VR system stack
 
@@ -56,9 +56,9 @@ Reading the diagram **left → right**:
 
 1. **Meta Quest 3 (hand tracking)** — Standalone headset: stereo display plus inside-out cameras that track the wearer’s hands. Avoids a tethered PC VR HMD and physical controllers for this project’s demos.
 
-2. **ALVR** — Wireless bridge on the same Wi-Fi LAN. Encodes/decodes frames between the workstation GPU and the Quest, and injects headset + hand tracking into the PC VR path. Chosen over cloud streaming (e.g. NVIDIA CloudXR) because it runs entirely on the local workstation. See [Findings — ALVR selection](06-findings-troubleshooting.md#design-notes).
+2. **ALVR** — Wireless bridge on the same Wi-Fi LAN. Encodes/decodes frames between the workstation GPU and the Quest, and injects headset + hand tracking into the PC VR path. Chosen over cloud streaming (e.g. NVIDIA CloudXR) because it runs entirely on the local workstation. See [Findings — ALVR selection](05-findings-troubleshooting.md#design-notes).
 
-3. **SteamVR** — PC VR compositor and driver host. ALVR registers as a SteamVR driver; without SteamVR there is no standard place for ALVR to publish devices. Session rule: always **Launch SteamVR from ALVR**, not from the Steam library alone ([Part B](03-workstation-config.md#part-b--per-session-startup)).
+3. **SteamVR** — PC VR compositor and driver host. ALVR registers as a SteamVR driver; without SteamVR there is no standard place for ALVR to publish devices. Session rule: always **Launch SteamVR from ALVR**, not from the Steam library alone ([§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)).
 
 4. **OpenXR runtime** — Khronos API that Isaac Sim uses for XR. SteamVR is set as the active OpenXR runtime so Isaac loads SteamVR’s OpenXR layer, which in turn sees ALVR’s devices. Isaac does not integrate with ALVR’s own API.
 
@@ -66,12 +66,29 @@ Reading the diagram **left → right**:
 
 6. **Isaac Lab `OpenXRDevice` → `teleop_dual_arm_vr.py` → Mobile AI IK** — Lab converts OpenXR hand poses into the same **16D** absolute IK actions as keyboard/gamepad teleop, then `env.step()` drives the dual-arm scene.
 
-```text
-Quest sensors ──Wi-Fi──► ALVR ──driver──► SteamVR ──OpenXR──► Isaac Sim/Lab ──16D──► robot IK
-     ▲                      │
-     └──────── stereo frames / compositor path ──────────────┘
+```mermaid
+flowchart LR
+  Quest["Quest sensors"]
+  ALVR["ALVR"]
+  SteamVR["SteamVR"]
+  OpenXR["OpenXR runtime"]
+  Isaac["Isaac Sim / Lab"]
+  IK["Robot IK"]
+
+  Quest -->|"Wi-Fi tracking"| ALVR
+  ALVR -->|"driver"| SteamVR
+  SteamVR -->|"OpenXR"| OpenXR
+  OpenXR --> Isaac
+  Isaac -->|"16D actions"| IK
+  Isaac -->|"stereo frames / compositor"| ALVR
+  ALVR -->|"Wi-Fi display"| Quest
 ```
 
-One-time install and every-session order: [Workstation config](03-workstation-config.md) (Parts A and B). Short day-to-day checklist: [IL cheat sheet](../IL_WORKFLOW_CHEATSHEET.md#1-collect-demos--vr-production).
+One-time VR host install: [VR workstation setup](../setup/vr-workstation.md). Every session: [runbook §1](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time). Copy-paste after VR is live: [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) · [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
 
-**Hub:** [Epic 4](../EPIC4_VR_INTEGRATION.md)
+## Continue reading
+
+- [VR workstation one-time setup](../setup/vr-workstation.md) / [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)
+- [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset)
+- [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr)
+- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)

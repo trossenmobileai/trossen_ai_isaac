@@ -5,17 +5,17 @@ Imitation-learning recording pipeline, action labels, and on-disk LeRobot Datase
 ## Recording pipeline
 Teleoperation moves the robot; imitation learning requires saved episodes in a standard format. The pipeline builds on the [record task config](02-tasks-and-scene.md#record_env_cfgpy-il-recording).
 
-**Production collection (this project):** VR, `--record_arm right` — see [cheat sheet production fact](../IL_WORKFLOW_CHEATSHEET.md). Entrypoint: [`run_collect_dataset.sh`](../../scripts/imitation_learning/run_collect_dataset.sh) → [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py). Keyboard/gamepad (`record_dual_arm.py`) is smoke tooling only.
+**Reporting collection (this project):** VR, `--record_arm right` — see [runbook project example reference](../IL_WORKFLOW_RUNBOOK.md). Entrypoint: [`run_collect_dataset.sh`](../../scripts/imitation_learning/run_collect_dataset.sh) → [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py). Keyboard/gamepad (`record_dual_arm.py`) is smoke tooling only.
 
 Pipeline components:
 
 1. The **Record task** (`Isaac-Reach-MobileAI-Record-Play-v0`). See [`record_env_cfg.py`](02-tasks-and-scene.md#record_env_cfgpy-il-recording).
-2. **Recording entrypoints** — **VR (production)** [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py) ([VR recording](../epic4/05-vr-recording.md)); **keyboard/gamepad (smoke / tooling only)** [`record_dual_arm.py`](../../scripts/imitation_learning/recording/record_dual_arm.py)
+2. **Recording entrypoints** — **VR (production)** [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py) ([VR recording](../epic4/04-vr-recording.md)); **keyboard/gamepad (smoke / tooling only)** [`record_dual_arm.py`](../../scripts/imitation_learning/recording/record_dual_arm.py)
 3. A **LeRobot dataset writer** under [`source/.../recording/`](../../source/trossen_ai_isaac/trossen_ai_isaac/recording/) that captures frames each simulation step
-4. Offline **validation** ([`verify_dataset.py`](../../scripts/imitation_learning/validation/verify_dataset.py), [cheat sheet — verify](../IL_WORKFLOW_CHEATSHEET.md#3-verify-dataset))
-5. **Training** — optional short smoke ([`smoke_train_act.py`](../../scripts/imitation_learning/training/smoke_train_act.py)) or full ACT/Pi0 train ([Training](05-training.md), [cheat sheet — train](../IL_WORKFLOW_CHEATSHEET.md#4-train))
+4. Offline **validation** ([`verify_dataset.py`](../../scripts/imitation_learning/validation/verify_dataset.py), [§5 Verify](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset)) — pass **your** `--root` / `--repo_id` (name and save location); this project’s reporting-set paths are only an example
+5. **Training** — optional short smoke ([`smoke_train_act.py`](../../scripts/imitation_learning/training/smoke_train_act.py)) or full policy train via wrappers ([Training](05-training.md), [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train)). Any LeRobot Dataset v3.0–compatible policy can train on the demos; **in-repo wrappers today are ACT and Pi0** — other policies need a new wrapper (or a direct `lerobot-train` call).
 
-`smoke_train_act.py` only checks that the dataset feeds the trainer for a few iterations. Production training uses [`run_verify_and_train.sh`](../../scripts/imitation_learning/run_verify_and_train.sh) (ACT) or [`run_train_pi0.sh`](../../scripts/imitation_learning/run_train_pi0.sh) (Pi0), which call `lerobot-train` in the `lerobot_train` conda env.
+`smoke_train_act.py` only checks that the dataset feeds the trainer for a few iterations. Production training uses [`run_verify_and_train.sh`](../../scripts/imitation_learning/run_verify_and_train.sh) (ACT) or [`run_train_pi0.sh`](../../scripts/imitation_learning/run_train_pi0.sh) (Pi0), which call `lerobot-train` in the `lerobot_train` conda env — open each script and edit settings near the top for your run.
 
 ```mermaid
 flowchart TD
@@ -75,7 +75,7 @@ Recording writes a self-describing [LeRobot Dataset v3.0](https://huggingface.co
 
 1. **`LeRobotDataset.create`** — opens the dataset root with the feature schema (joint dims + cameras for `--record_arm`), fps, and `robot_type`.
 2. **Per simulation step** — after `env.step`, `capture_frame` builds one frame dict; `add_frame` buffers it.
-3. **Episode save** — workstation **N** (or equivalent) calls `save_episode`, flushing the buffer into parquet + video chunks.
+3. **Episode save** — workstation **N** (or equivalent) calls `save_episode`, flushing the buffer into parquet + video chunks. This can take several seconds; wait for `[RECORD] Saved episode (N frames) -> ...` in the terminal before starting the next episode ([§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator), [VR recording](../epic4/04-vr-recording.md)).
 4. **Finalize** — on exit / interrupt, `finalize()` writes metadata so the dataset is readable by LeRobot trainers.
 5. **VR multi-session** — shards under `.../shards/session_*` are combined with [`run_merge_dataset.sh`](../../scripts/imitation_learning/run_merge_dataset.sh) (`aggregate_datasets`) into one valid v3 dataset.
 
@@ -88,7 +88,7 @@ Typical on-disk layout (see HF docs for the full v3 contract):
 | `data/` | Parquet tables of non-video frame fields (`observation.state`, `action`, `task`, …) |
 | `videos/` | MP4 (or equivalent) streams per `observation.images.*` camera feature |
 
-The reporting set (`mobile_ai_right_pick_place_20260714_v2`) is this v3 format with **7D** right-arm state/action and cameras `cam_high` + `cam_right_wrist` (~50 episodes / ~30.5k frames @ 60 FPS — [cheat sheet production fact](../IL_WORKFLOW_CHEATSHEET.md)).
+The reporting set (`mobile_ai_right_pick_place_20260714_v2`) is this v3 format with **7D** right-arm state/action and cameras `cam_high` + `cam_right_wrist` (~50 episodes / ~30.5k frames @ 60 FPS — [runbook project example reference](../IL_WORKFLOW_RUNBOOK.md)).
 
 ### Recording controls
 
@@ -114,9 +114,9 @@ Motion keys: full table in [Teleoperation](03-teleoperation.md).
 | **Y** / **A** | Switch arm / toggle gripper |
 | Keyboard **M** | Discard episode (no gamepad discard binding) |
 
-**VR** (`record_dual_arm_vr.py`): workstation **U** / **I** / **N** / **M** / **B** / **J** (+ pinch grippers). Full table: [VR recording](../epic4/05-vr-recording.md).
+**VR** (`record_dual_arm_vr.py`): workstation **U** / **I** / **N** / **M** / **B** / **J** (+ pinch grippers). Full table: [VR recording](../epic4/04-vr-recording.md). After **N** (save), wait for `[RECORD] Saved episode (...)` before the next take.
 
-Quick reference for all devices: [IL cheat sheet — Controls](../IL_WORKFLOW_CHEATSHEET.md#controls-quick-reference).
+Quick reference for all devices: [IL runbook — Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference).
 
 **LeRobot dependency:** LeRobot is not bundled in Isaac Sim Python. It is installed separately for recording (`lerobot==0.4.4` in Isaac Sim Python 3.11), dataset verification (`~/lerobot_trossen/.venv`), and training (`lerobot_train` conda environment).
 
@@ -139,6 +139,12 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 
 ## How to run
 
-Production VR collection, merge, and keyboard smoke recording: [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md). VR stack details: [VR recording](../epic4/05-vr-recording.md).
+- Production VR collect / merge: [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr)
+- Keyboard smoke recording: [§4](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate)
+- Design / XR stack: [VR recording](../epic4/04-vr-recording.md)
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [§5 Verify](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset) · [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train)
+- [Training](05-training.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

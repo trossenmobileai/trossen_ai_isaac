@@ -1,6 +1,6 @@
 # Teleoperation
 
-Dual-arm keyboard/gamepad teleoperation and VR summary.
+Dual-arm keyboard/gamepad teleoperation and VR summary (design). **Operator key maps:** [runbook Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference); day-to-day keyboard/gamepad commands: [§4](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate).
 
 ## Keyboard / gamepad
 
@@ -15,7 +15,7 @@ Mobile AI requires **dual-arm** control with **switchable** arm selection (one a
 | [`teleop_se3_agent.py`](../../scripts/teleoperation/teleop_se3_agent.py) | [`teleop_dual_arm_switch.py`](../../scripts/teleoperation/teleop_dual_arm_switch.py) |
 | Single-arm Se3 teleoperation | Switchable dual-arm IK-Abs teleoperation via [`se3_switch.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/teleop/se3_switch.py) |
 
-VR hand-tracking teleoperation extends this layer further; see [Epic 4](../EPIC4_VR_INTEGRATION.md) / [VR teleoperation](../epic4/04-vr-teleoperation.md).
+VR hand-tracking teleoperation extends this layer further; see [Epic 4](../EPIC4_VR_INTEGRATION.md) / [VR teleoperation](../epic4/03-vr-teleoperation.md).
 
 #### Control model and loop
 
@@ -37,6 +37,8 @@ flowchart LR
 ```
 
 Device motion deltas and gripper toggles are assembled into the **16D** layout (`L_pose(7)`, `R_pose(7)`, `L_grip`, `R_grip`); inactive-arm terms hold the last pose. The task’s differential IK turns those absolute EE targets into joint motion.
+
+Periodic `[step=...]` status lines (arm / grip / pose every 60 sim steps) are **off by default**. Pass `--step_log` to enable them. Key-event logs (`[ARM SWITCH]`, `[GRIPPER]`, `[RECORD]`, `[RESET]`, …) still print as usual.
 
 > **Screenshot placeholder:** `docs/assets/epic3/keyboard-teleop-viewport.png` — Isaac Sim viewport during keyboard/gamepad teleop.
 >
@@ -79,27 +81,33 @@ Device motion deltas and gripper toggles are assembled into the **16D** layout (
 
 Episode discard on gamepad uses keyboard **M** only (no gamepad binding).
 
-Tune motion sensitivity with `--sensitivity`. For gamepad, `--gamepad_dead_zone` filters stick noise. Step-by-step launch commands are in [cheat sheet](../IL_WORKFLOW_CHEATSHEET.md).
+Tune motion sensitivity with `--sensitivity`. For gamepad, `--gamepad_dead_zone` filters stick noise. Copy-paste launch: [§4 Keyboard / gamepad](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate).
 
 ## VR teleoperation (summary)
-After keyboard/gamepad teleop worked on the pick-and-place task, the team added **Quest 3 + ALVR + OpenXR** teleoperation so both arms can be driven by hand tracking. Implementation lives in [VR teleoperation](../epic4/04-vr-teleoperation.md) (`teleop_dual_arm_vr.py`, `source/.../teleop/vr/`).
+After keyboard/gamepad teleop worked on the pick-and-place task, the team added **Quest 3 + ALVR + OpenXR** teleoperation so both arms can be driven by hand tracking. Implementation lives in [VR teleoperation](../epic4/03-vr-teleoperation.md) (`teleop_dual_arm_vr.py`, `source/.../teleop/vr/`).
 
 Epic 3 keeps only this summary:
 
 - Same task ID as keyboard teleop: `Isaac-Reach-MobileAI-IK-Abs-Play-v0` (16D IK-Abs actions).
 - Default VR session is single-arm focus for demos; `--dual_arm` enables true bimanual control.
-- **Workstation teleop keys:** **N** engage · **M** pause · **B** re-anchor · **J** reset · **TAB** switch arm (single-arm) — [VR teleoperation](../epic4/04-vr-teleoperation.md).
-- **Workstation recording keys:** **U** engage · **I** pause · **N** episode · **M** discard · **B** re-anchor · **J** reset — [VR recording](../epic4/05-vr-recording.md).
+- **Workstation teleop keys:** **N** engage · **M** pause · **B** re-anchor · **J** reset · **TAB** switch arm (single-arm) — [VR teleoperation](../epic4/03-vr-teleoperation.md).
+- **Workstation recording keys:** **U** engage · **I** pause · **N** episode · **M** discard · **B** re-anchor · **J** reset — [VR recording](../epic4/04-vr-recording.md).
 - **Hands:** pinch = gripper. (Kit binds **R**, so reset is **J**.)
+- Operator ritual and expected terminal logs: [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator) · [Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference).
 
-Full stack setup, CLI flags, and troubleshooting: [Epic 4 hub](../EPIC4_VR_INTEGRATION.md), [Workstation config](../epic4/03-workstation-config.md), [Findings](../epic4/06-findings-troubleshooting.md).
+Full stack setup, CLI flags, and troubleshooting: [Epic 4 hub](../EPIC4_VR_INTEGRATION.md), [VR one-time setup](../setup/vr-workstation.md), [§1 session](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time), [Findings](../epic4/05-findings-troubleshooting.md).
 
 
 ---
 
 ## How to run
 
-- Keyboard/gamepad teleop: [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md) (and Epic 3 hub).
-- VR teleop / VR recording: [VR teleoperation](../epic4/04-vr-teleoperation.md), [VR recording](../epic4/05-vr-recording.md), and [cheat sheet — VR collect](../IL_WORKFLOW_CHEATSHEET.md#1-collect-demos--vr-production).
+- Keyboard/gamepad practice teleop: [§4](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate)
+- VR practice teleop: [§2](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) · design [VR teleoperation](../epic4/03-vr-teleoperation.md)
+- VR production collect: [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · design [VR recording](../epic4/04-vr-recording.md)
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [§2 Practice VR](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) / [§4 Keyboard teleop](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate)
+- [Recording (LeRobot)](04-recording-lerobot.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

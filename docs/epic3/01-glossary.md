@@ -45,4 +45,8 @@ Shared abbreviations and terms for the Mobile AI simulation / IL docs.
 
 
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [Tasks and scene](02-tasks-and-scene.md)
+- [§0 Prerequisites](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

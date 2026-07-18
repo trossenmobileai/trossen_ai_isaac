@@ -1,7 +1,16 @@
-# Training (ACT and Pi0)
+# Training
 
+After a verified [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) exists, this step **trains a policy** with `lerobot-train` in the `lerobot_train` conda env. Isaac Sim is **not** involved until evaluation ([Evaluation](06-evaluation.md)).
 
-After demonstrations are recorded and verified, the same [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) can train more than one policy type. This project trained **ACT** (twice) and **Pi0** (once) on the **VR-collected** right-arm pick-and-place set (`mobile_ai_right_pick_place_20260714_v2`), then evaluated the longer ACT run in simulation.
+**How to train:** run a repo **wrapper `.sh`**. Open the script and set dataset paths, steps, job name, and policy flags for **your** needs — defaults are this project’s recipe, not a fixed requirement. Copy-paste: [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train).
+
+**Wrappers shipped today:** **ACT** ([`run_verify_and_train.sh`](../../scripts/imitation_learning/run_verify_and_train.sh)) and **Pi0** ([`run_train_pi0.sh`](../../scripts/imitation_learning/run_train_pi0.sh)). Both use `conda run --no-capture-output` for a live progress bar.
+
+**Other policies:** any LeRobot-supported policy that consumes Dataset v3.0 can train on the same demos, but this repo does **not** ship wrappers beyond ACT/Pi0 — add a wrapper or call `lerobot-train` yourself.
+
+## This project’s runs (ACT and Pi0)
+
+This project trained **ACT** (twice) and **Pi0** (once) on the **VR-collected** right-arm pick-and-place set (`mobile_ai_right_pick_place_20260714_v2`), then evaluated the longer ACT run in simulation. The tables below document **those runs**, not every possible training configuration.
 
 ```mermaid
 flowchart LR
@@ -14,8 +23,6 @@ flowchart LR
   Disk --> Verify --> Train --> Ckpt --> Eval
 ```
 
-Isaac Sim is **not** involved during training — only when evaluating a checkpoint ([Evaluation](06-evaluation.md)).
-
 **What a newcomer should know**
 
 1. Recording writes a [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) (parquet frames + MP4 cameras). That format is the common input for LeRobot trainers.
@@ -24,7 +31,7 @@ Isaac Sim is **not** involved during training — only when evaluating a checkpo
 4. Training runs in the external `lerobot_train` conda env (Python 3.12 / CUDA). Isaac Sim is not involved until evaluation.
 5. Checkpoints land under `~/trossen_ai_isaac/outputs/train/<job_name>/checkpoints/`. Evaluation uses the `last` (or a numbered) `pretrained_model` folder.
 
-**Shared dataset (all three runs)**
+**Shared dataset (this project’s ACT / Pi0 runs)**
 
 | Field | Value |
 |-------|--------|
@@ -35,7 +42,7 @@ Isaac Sim is **not** involved during training — only when evaluating a checkpo
 | `video_backend` | `pyav` |
 | Image transforms | Disabled during these runs |
 
-**Artifacts produced**
+**Artifacts produced (this project)**
 
 | Job | Policy | Steps | Output directory | Role |
 |-----|--------|-------|------------------|------|
@@ -43,11 +50,11 @@ Isaac Sim is **not** involved during training — only when evaluating a checkpo
 | `act_mobile_ai_right_v2_100k` | ACT | 100 000 | `~/trossen_ai_isaac/outputs/train/act_mobile_ai_right_v2_100k` | **Reporting model** — 30-episode closed-loop eval |
 | `pi0_mobile_ai_right_v2` | Pi0 | 10 000 | `~/trossen_ai_isaac/outputs/train/pi0_mobile_ai_right_v2` | Fine-tuned Pi0; sim eval deferred ([Evaluation](06-evaluation.md)) |
 
-**How the runs were launched**
+**How the runs were launched** (examples — edit wrapper settings for your own jobs)
 
-- **ACT 10k:** [`run_verify_and_train.sh`](../../scripts/imitation_learning/run_verify_and_train.sh) (verify dataset, then `lerobot-train` with `--policy.type=act`, `--steps=10000`, `--save_freq=1000`).
-- **ACT 100k:** Same ACT recipe and dataset as the 10k run, with `--steps=100000`, `--job_name=act_mobile_ai_right_v2_100k`, a separate `--output_dir`, and `--save_freq=10000`. There is no separate wrapper script in-repo; the command is the 10k train line with those flags changed ([cheat sheet — train](../IL_WORKFLOW_CHEATSHEET.md#4-train)).
-- **Pi0 10k:** [`run_train_pi0.sh`](../../scripts/imitation_learning/run_train_pi0.sh) after [`run_verify_pi0_dataset.sh`](../../scripts/imitation_learning/run_verify_pi0_dataset.sh) ([cheat sheet — train](../IL_WORKFLOW_CHEATSHEET.md#4-train)).
+- **ACT (default wrapper recipe):** [`run_verify_and_train.sh`](../../scripts/imitation_learning/run_verify_and_train.sh) — verify, then `lerobot-train` with `--policy.type=act`. Editable: `REPO_ID`, `ROOT`, `OUTPUT_DIR`, `STEPS`. Live progress via `--no-capture-output`.
+- **ACT longer run (this project’s reporting model):** same recipe with `--steps=100000`, separate `--output_dir` / `--job_name`, `--save_freq=10000` — copy-paste in [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train) (no separate wrapper).
+- **Pi0:** [`run_train_pi0.sh`](../../scripts/imitation_learning/run_train_pi0.sh) after [`run_verify_pi0_dataset.sh`](../../scripts/imitation_learning/run_verify_pi0_dataset.sh). Editable vars / flags near the top; live progress same as ACT.
 
 **ACT hyperparameters** (identical for the 10k and 100k jobs except `steps` and `save_freq`)
 
@@ -95,7 +102,7 @@ Isaac Sim is **not** involved during training — only when evaluating a checkpo
 
 Configs for each finished run are stored next to the weights, e.g. `.../checkpoints/last/pretrained_model/train_config.json`.
 
-**Evaluation choice:** The team evaluated **`act_mobile_ai_right_v2_100k`** (not the 10k ACT or Pi0) with a 30-episode closed-loop rollout. Procedure: [Evaluation](06-evaluation.md) / [cheat sheet](../IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop). Results: [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
+**Evaluation choice:** The team evaluated **`act_mobile_ai_right_v2_100k`** (not the 10k ACT or Pi0) with a 30-episode closed-loop rollout. Procedure: [Evaluation](06-evaluation.md) / [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop). Results: [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
 
 ---
 
@@ -104,6 +111,11 @@ Configs for each finished run are stored next to the weights, e.g. `.../checkpoi
 
 ## How to run
 
-Verify + train wrappers: [IL Workflow Cheat Sheet — Train](../IL_WORKFLOW_CHEATSHEET.md#4-train). Hyperparameters and job table are documented above (single source of truth).
+Copy-paste policy training (wrappers + framing): [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train). Tables above record **this project’s** ACT/Pi0 runs (single source of truth for those hyperparameters). Open wrapper scripts and adjust settings near the top for your own jobs.
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train) · [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
+- [Evaluation](06-evaluation.md)
+- [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

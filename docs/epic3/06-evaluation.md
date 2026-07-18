@@ -5,7 +5,7 @@ Closed-loop ACT / Pi0 evaluation in simulation: how it works, success criteria, 
 
 Closed-loop deployment and evaluation of a trained ACT or Pi0 checkpoint in simulation. This is the sim equivalent of real-robot `lerobot-record --policy.path=<checkpoint>` ([Trossen ACT evaluation docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin/train_and_evaluate.html)).
 
-**ACT and Pi0 share one Isaac eval path.** Both wrappers call [`play_act.py`](../../scripts/imitation_learning/evaluation/play_act.py) → [`act_rollout.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) → the same metrics. The sidecar loads `act` or `pi0` from the checkpoint config. Only default checkpoint paths and output directories differ (`outputs/eval/act` vs `outputs/eval/pi0`). **Pi0 was trained but closed-loop sim eval was not completed** (Inductor compile / 120 s timeout). **Reporting uses ACT 100k** (`act_mobile_ai_right_v2_100k`) — see [Training](05-training.md), [cheat sheet — evaluate](../IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop), [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
+**ACT and Pi0 share one Isaac eval path.** Both wrappers call [`play_act.py`](../../scripts/imitation_learning/evaluation/play_act.py) → [`act_rollout.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/evaluation/act_rollout.py) → the same metrics. The sidecar loads `act` or `pi0` from the checkpoint config. Only default checkpoint paths and output directories differ (`outputs/eval/act` vs `outputs/eval/pi0`). **Pi0 was trained but closed-loop sim eval was not completed** (Inductor compile / 120 s timeout). **Reporting uses ACT 100k** (`act_mobile_ai_right_v2_100k`) — see [Training](05-training.md), [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop), [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
 
 #### How the policy is evaluated
 
@@ -18,25 +18,33 @@ Each episode is a **closed-loop rollout** in `Isaac-Lift-Cube-MobileAI-Joint-Pos
 
 ```mermaid
 flowchart LR
-  subgraph isaac [Isaac_Sim_Python311]
-    Play["play_act.py"]
-    Rollout["act_rollout.py"]
-    Env["Lift Joint-Pos Play env"]
-    Tracker["EpisodeCubeTracker"]
-    Summary["rollout_summary.json"]
+ subgraph isaac["Isaac_Sim_Python311"]
+        Play["play_act.py"]
+        Rollout["act_rollout.py"]
+        Env["Lift Joint-Pos Play env"]
+        Tracker["EpisodeCubeTracker"]
+        Summary["rollout_summary.json"]
   end
-  subgraph conda [lerobot_train_Python312]
-    Sidecar["policy_sidecar.py"]
-    Ckpt["ACT or Pi0 checkpoint"]
+ subgraph conda["lerobot_train_Python312"]
+        Sidecar["policy_sidecar.py"]
+        Ckpt["ACT or Pi0 checkpoint"]
   end
-  Wrapper["run_play_act.sh / run_play_pi0.sh"] --> Play --> Rollout
-  Rollout -->|"spawn clean env"| Sidecar
-  Sidecar --> Ckpt
-  Rollout <-->|"TCP reset / infer"| Sidecar
-  Rollout -->|"7D state + cameras"| Sidecar
-  Sidecar -->|"7D action"| Rollout
-  Rollout -->|"map to 14D left held"| Env
-  Env --> Tracker --> Summary
+    Wrapper["run_play_act.sh / run_play_pi0.sh"] --> Play
+    Play --> Rollout
+    Rollout L_Rollout_Sidecar_0@-- spawn clean env --> Sidecar
+    Sidecar --> Ckpt
+    Rollout L_Rollout_Sidecar_2@<-- TCP reset / infer --> Sidecar
+    Rollout L_Rollout_Sidecar_3@-- 7D state + cameras --> Sidecar
+    Rollout -- map to 14D left held --> Env
+    Env --> Tracker
+    Tracker --> Summary
+    Sidecar L_Sidecar_Rollout_0@-- 7D action --> Rollout
+
+
+    L_Rollout_Sidecar_0@{ curve: natural } 
+    L_Rollout_Sidecar_2@{ curve: natural } 
+    L_Rollout_Sidecar_3@{ curve: natural } 
+    L_Sidecar_Rollout_0@{ curve: natural }
 ```
 
 > **Screenshot placeholder:** `docs/assets/epic3/eval-isaac-viewport.png` — Isaac Sim viewport during a closed-loop eval episode.
@@ -124,8 +132,13 @@ Lift duration has no minimum. Return uses `cube_is_placed` (on-table + stable + 
 
 ## How to run
 
-Closed-loop ACT eval: [IL Workflow Cheat Sheet — Evaluate](../IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop).
+Evaluate **your** checkpoint with the ACT or Pi0 play wrappers (checkpoint path, episode count, fps are args or editable defaults): [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop).
 
-**Results (reporting run):** [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
+**Results (this project’s ACT reporting run):** [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md).
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Continue reading
+
+- [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
+- [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
+- [Findings and troubleshooting](07-findings-troubleshooting.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

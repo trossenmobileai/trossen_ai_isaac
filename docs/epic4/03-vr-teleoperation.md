@@ -1,6 +1,8 @@
 # VR Teleoperation
 
-How Quest hand tracking drives the Mobile AI IK-Abs task. **Commands:** [IL cheat sheet](../IL_WORKFLOW_CHEATSHEET.md#1-collect-demos--vr-production) (session startup + collect). Practice teleop without recording uses `teleop_dual_arm_vr.py` (see [docs index checklist](../README.md#quick-verification-checklist)).
+How Quest hand tracking drives the Mobile AI IK-Abs task.
+
+**Copy-paste commands:** [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset). Session startup: [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) (launch pointer: [§1.7](../IL_WORKFLOW_RUNBOOK.md#17-launch-teleop-or-recording-on-the-pc)). Collect: [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
 
 ## Integration with the simulation pipeline
 
@@ -32,7 +34,7 @@ flowchart LR
 
 ## VR module package
 
-Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop entrypoint calls `run_vr_teleop_loop` in `loop.py`. Dataset collection uses [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py) with the same control loop plus `LeRobotRecorder` ([VR recording](05-vr-recording.md)).
+Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop entrypoint calls `run_vr_teleop_loop` in `loop.py`. Dataset collection uses [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py) with the same control loop plus `LeRobotRecorder` ([VR recording](04-vr-recording.md)).
 
 - **`loop.py`**: Main VR control loop, workstation keyboard sidecar, warm-up guard, and action assembly.
 - **`hand_tracking.py`**: Hand pose and pinch extraction from OpenXR device output.
@@ -43,9 +45,11 @@ Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop
 
 `run_vr_teleop_loop` mirrors the Epic 3 teleoperation pattern (`input → 16D action → env.step()`), but reads from the OpenXR `handtracking` device instead of `Se3Keyboard` or `Se3Gamepad`.
 
-**Bimanual control:** Unlike keyboard/gamepad switch mode, with `--dual_arm` the left hand controls the left arm and the right hand controls the right arm simultaneously. Default teleop is single-arm (`--start_arm left|right`, **TAB** to switch). Recording locks the arm with `--record_arm` on the recording entrypoint only ([VR recording](05-vr-recording.md)).
+**Bimanual control:** Unlike keyboard/gamepad switch mode, with `--dual_arm` the left hand controls the left arm and the right hand controls the right arm simultaneously. Default teleop is single-arm (`--start_arm left|right`, **TAB** to switch). Recording locks the arm with `--record_arm` on the recording entrypoint only ([VR recording](04-vr-recording.md)).
 
-**Hand-anchored mode (default):** `--anchor_mode hand_anchored` snapshots the operator's hand pose and the robot's end-effector pose on the first active frame. Subsequent hand movements relative to that start map to arm movements. The operator re-anchors with **B**, environment reset, or pause/resume if body orientation changes.
+**Hand-anchored mode (default):** `--anchor_mode hand_anchored` snapshots the operator's hand pose and the robot's end-effector pose on the first active frame. Subsequent hand movements *relative to that start* map to arm movements.
+
+**Re-anchor (**B**):** clears the hand↔EE snapshot and pose-smoothing filter, then re-snapshots head yaw + hand/EE on the next active frame so “forward relative to the headset” maps to robot-forward again — **without** pausing or resetting the environment. Also happens automatically after pause/resume (next engage) and after environment reset. Full operator ritual (C-shape hands, stay still, slow motion): [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator).
 
 **Absolute mode:** `--anchor_mode absolute` feeds hand pose directly as the IK target. Intended for humanoid avatars; not recommended for Mobile AI room-scale use.
 
@@ -53,19 +57,13 @@ Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop
 
 **Staged activation (default):** The script begins **inactive**. A warm-up guard (`--warmup_frames`, `--warmup_min_pos`) waits for both hands to report live tracking, then a second user at the workstation presses **N** to engage. The hand-to-end-effector anchor is captured at that moment so the arms do not jump on connect. Pass `--autostart` to engage automatically after warm-up.
 
-**Workstation keyboard controls** (sidecar `Se3Keyboard`; headset operator has no keyboard):
+**Workstation keyboard controls** (sidecar `Se3Keyboard`; headset operator has no keyboard). **Isaac Sim must be the focused window** or keys are ignored. **Operator quick ref (keys + expected logs):** [runbook Controls — VR teleop](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference). Design notes below; operator ritual: [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator).
 
-| Key | Action |
-|-----|--------|
-| **N** | Start / engage teleoperation (capture anchor on first active frame) |
-| **M** | Pause (hold pose; re-anchors on resume) |
-| **B** | Re-anchor only (no pause) |
-| **J** | Reset environment |
-| **TAB** | Switch active arm (single-arm mode only; disabled with `--dual_arm` or when the arm is locked for recording) |
+Warm-up prints `[WARMUP] Hand tracking stable after N frames -- press N at the workstation to engage.` Pinch has no dedicated print — with `--step_log`, see `L_grip` / `R_grip` on periodic `[VR step=...]` lines.
 
-**Grippers (headset):** pinch gesture — see above. Recording uses a different workstation key map ([VR recording](05-vr-recording.md)).
+**Grippers (headset):** pinch gesture — see above. Recording uses a different workstation key map ([VR recording](04-vr-recording.md); [runbook Controls — VR recording](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference)).
 
-**VR-specific rendering:** Scene cameras are removed during pure VR teleop (the headset view replaces them). DLSS anti-aliasing is enabled. Recording keeps cameras via `--keep_cameras` ([VR recording](05-vr-recording.md)).
+**VR-specific rendering:** Scene cameras are removed during pure VR teleop (the headset view replaces them). DLSS anti-aliasing is enabled. Recording keeps cameras via `--keep_cameras` ([VR recording](04-vr-recording.md)).
 
 **View presets** (`--view`): `first_person`, `over_shoulder`, `third_person` (default). Presets set `XrCfg.anchor_prim_path`, `anchor_pos`, and `anchor_rot`. Override with `--anchor_pos`, `--anchor_rot`, or `--anchor_prim_path`.
 
@@ -96,9 +94,9 @@ Default `XrCfg` anchors the operator at the robot head camera (`cam_high_link`) 
 
 VR was built in three stages on the Mobile AI robot directly (no separate Franka OpenXR smoke test):
 
-1. **Mobile AI dual-arm VR** — hand tracking on `Isaac-Reach-MobileAI-IK-Abs-Play-v0` (`feat/vr-handtracking-teleop`).
+1. **Mobile AI dual-arm VR** — hand tracking on `Isaac-Reach-MobileAI-IK-Abs-Play-v0`.
 2. **Modular refactor** — logic under `source/.../teleop/vr/`.
-3. **VR + LeRobot recording** — `record_dual_arm_vr.py` / `run_vr_recording_loop`; merged to `main` via PR #2. See [VR recording](05-vr-recording.md).
+3. **VR + LeRobot recording** — `record_dual_arm_vr.py` / `run_vr_recording_loop`. See [VR recording](04-vr-recording.md).
 
 ## Repository and module structure
 
@@ -140,6 +138,7 @@ From [`teleop/vr/cli.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/teleop/
 | `--no_hand_markers` | off | Disable debug EE/hand markers |
 | `--control_yaw_deg` | `-90.0` | Yaw (deg) applied to hand-motion deltas in `hand_anchored` mode |
 | `--pose_smoothing` | `0.5` | EMA weight of previous IK pose (`0` = raw, higher = smoother/laggier) |
+| `--step_log` | off | Print `[VR step=...]` status every 60 sim steps (hand pose / grip / REC); off by default |
 
 **Camera / XR compatibility** (`add_vr_camera_args`)
 
@@ -150,4 +149,9 @@ From [`teleop/vr/cli.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/teleop/
 | `--camera_probe_capture_frame` | off | During probes, also run full recording frame capture |
 | `--camera_probe_output` | none | Optional JSON path for probe summary on exit |
 
-**Hub:** [Epic 4](../EPIC4_VR_INTEGRATION.md)
+## Continue reading
+
+- [VR workstation one-time setup](../setup/vr-workstation.md) / [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)
+- [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset)
+- [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) / [VR recording](04-vr-recording.md)
+- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)

@@ -1,7 +1,7 @@
 # ACT Evaluation Report — 100k, 30 Episodes
 
 > Reporting result for closed-loop ACT policy quality in the Mobile AI digital twin.
-> Architecture and metrics: [Evaluation](epic3/06-evaluation.md). How to run: [IL Workflow Cheat Sheet](IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop).
+> Architecture and metrics: [Evaluation](epic3/06-evaluation.md). How to run: [§7 Evaluate](IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop).
 > Training context: [Training](epic3/05-training.md).
 
 ## Summary
@@ -54,14 +54,13 @@ All 13 failures ended with `no_progress`: the cube never left the on-table heigh
 - Performance is similar across cube colors (roughly 54–63%), so color randomization is not the dominant failure driver.
 - The main gap is **approach / grasp** (never lifting), not placing after a successful lift.
 
-Reproduce or extend the run with the [cheat sheet evaluate section](IL_WORKFLOW_CHEATSHEET.md#5-evaluate-closed-loop). Architecture and metric field definitions: [Evaluation](epic3/06-evaluation.md).
+Reproduce or extend the run with [§7 Evaluate](IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop). Architecture and metric field definitions: [Evaluation](epic3/06-evaluation.md).
 
-## Related documentation
+## Continue reading
 
-- [Docs index](README.md#epic-3--simulation-training-pipeline) (Epic 3 section)
+- [§7 Evaluate](IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
 - [Evaluation](epic3/06-evaluation.md)
-- [IL Workflow Cheat Sheet](IL_WORKFLOW_CHEATSHEET.md)
-- BookStack: [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md)
-
----
+- [§6 Train](IL_WORKFLOW_RUNBOOK.md#6-train)
+- [Docs index](README.md)
+- [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md)
 

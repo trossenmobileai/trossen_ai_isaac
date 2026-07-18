@@ -1,16 +1,28 @@
 # Future Work
 
-- [ ] Unblock Pi0 sim eval (Inductor compile / 120 s timeout) → [Evaluation](06-evaluation.md)
-- [ ] Sim-to-real deployment on physical Mobile AI
-- [ ] Mobile AI reinforcement learning tasks
-- [ ] Broader task success metrics and manipulation goals beyond pick–lift–place
+Derived from open items in [Findings and Troubleshooting](07-findings-troubleshooting.md) (resolved issues and locked eval early-stop behavior are not repeated here).
 
-### Related documentation
+## Simulation and transfer
 
-**[Epic 4 — VR Integration](../EPIC4_VR_INTEGRATION.md)** / [`epic4/`](../epic4/): VR headset teleoperation and production dataset recording.
+- [ ] **Sim-to-real on physical Mobile AI** — policies are sim-only today ([Current limitations](07-findings-troubleshooting.md#current-limitations))
+- [ ] **Close the visual / domain gap** — lighting, materials/textures, and camera appearance closer to RealSense / lab conditions before hardware transfer
+- [ ] **Mobile AI RL / PPO tasks** — unlike stock WXAI reach, lift, and cabinet; no Mobile AI RL envs yet
 
-**[IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)**: step-by-step collect → train → eval.
+## Teleoperation and demos
 
-**[ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)**: 100k ACT 30-episode results.
+- [ ] **Keyboard / gamepad teleop fine-tuning** — gains and smoothing for smoother operator motion ([Teleoperation](03-teleoperation.md); VR tracking work lives in [Epic 4 future work](../epic4/06-future-work.md))
+- [ ] **Broader demonstration coverage** — production train set is VR right-arm only; expand modalities / arms once collection quality allows ([Recording](04-recording-lerobot.md), [Epic 4](../epic4/06-future-work.md))
 
-**Hub:** [Epic 3](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) · **Cheat sheet:** [IL Workflow Cheat Sheet](../IL_WORKFLOW_CHEATSHEET.md)
+## Training and evaluation
+
+- [ ] **Unblock Pi0 closed-loop sim eval** — Inductor/Triton AUTOTUNE exceeds the 120 s sidecar timeout on first step ([Evaluation](06-evaluation.md) / [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop))
+- [ ] **Optional eval LeRobot datasets** — closed-loop rollout is metrics-only today; optional `eval_*` dataset writing like some real-robot flows
+- [ ] **Richer task success metrics** — Reach recording is an IL sandbox without automated success; broaden manipulation goals / metrics beyond pick–lift–place ([Evaluation](06-evaluation.md))
+- [ ] **Improve ACT approach / grasp success** — reporting failures are mostly `no_progress` (never lift); see [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
+
+## Continue reading
+
+- [Findings and Troubleshooting](07-findings-troubleshooting.md)
+- [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop) · [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
+- [Epic 4 — Future work](../epic4/06-future-work.md)
+- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

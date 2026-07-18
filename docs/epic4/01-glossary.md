@@ -25,4 +25,10 @@ VR-specific abbreviations and terms. Shared IL terms (IK, IK-Abs, 16D, OpenXR, e
 | **Retargeter** | Isaac Lab component that converts OpenXR hand data into robot action terms (pose and gripper). |
 | **Workstation keyboard sidecar** | Plain `Se3Keyboard` used only for session keys (N/M/B/J); the headset operator has no keyboard. |
 
-**Hub:** [Epic 4](../EPIC4_VR_INTEGRATION.md)
+## Continue reading
+
+- [Background and stack](02-background-and-stack.md)
+- [VR workstation one-time setup](../setup/vr-workstation.md)
+- [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)
+- [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset)
+- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
