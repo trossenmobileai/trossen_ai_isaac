@@ -2,6 +2,8 @@
 
 Imitation-learning recording pipeline, action labels, and on-disk LeRobot Dataset v3.0 layout.
 
+**End-to-end (VR production path):** Quest hand tracking → ALVR / SteamVR / OpenXR → Isaac Lab 16D IK-Abs → `env.step` → LeRobot writer → finalize → verify → train. Stack: [Background and stack](../epic4/02-background-and-stack.md). Operator collect: [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr). Verify: [§5](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset).
+
 ## Recording pipeline
 Teleoperation moves the robot; imitation learning requires saved episodes in a standard format. The pipeline builds on the [record task config](02-tasks-and-scene.md#record_env_cfgpy-il-recording).
 
@@ -50,9 +52,18 @@ flowchart TD
 | `observation.images.cam_left_wrist` | 480×640 RGB video | Left wrist camera |
 | `observation.images.cam_right_wrist` | 480×640 RGB video | Right wrist camera |
 
-The **reporting** train set used `--record_arm right`: **7D** state/action plus `cam_high` + `cam_right_wrist` only ([Training](05-training.md)).
+**Reporting schema** (`--record_arm right` — this project’s train set):
 
-> **Design note:** Actions are stored as **commanded joint position targets**, not IK pose commands. During teleoperation the operator drives 16D IK-Abs actions; the recorder captures the resulting joint targets that the action manager applies. This matches the [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) layout (`observation.state` / `action` / `observation.images.*` / `task`).
+| Field | Shape | Description |
+|-------|-------|-------------|
+| `observation.state` | 7D float32 | Right arm joint positions (`right_joint_0..6`) |
+| `action` | 7D float32 | Commanded right-arm joint targets |
+| `observation.images.cam_high` | 480×640 RGB video | Overhead camera |
+| `observation.images.cam_right_wrist` | 480×640 RGB video | Right wrist camera |
+
+Left-arm mode mirrors right (`left_joint_*` + `cam_left_wrist`). Mode ↔ cameras/dims: [VR recording](../epic4/04-vr-recording.md#one-arm-vs-two-arm-record_arm). Training: [Training](05-training.md).
+
+> **Design note:** Actions are stored as **commanded joint position targets**, not IK pose commands. During teleoperation the operator drives 16D IK-Abs actions; the recorder captures the resulting joint targets that the action manager applies (projected to the joints selected by `--record_arm`). This matches the [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3) layout (`observation.state` / `action` / `observation.images.*` / `task`).
 
 ```mermaid
 flowchart TD

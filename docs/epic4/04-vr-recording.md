@@ -2,6 +2,8 @@
 
 Demonstration collection over VR + LeRobot (design). Operator commands: [§3 Collect demos — VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
 
+**End-to-end:** Quest hand tracking → ALVR / SteamVR / OpenXR ([stack](02-background-and-stack.md)) → Isaac Lab 16D IK-Abs → `env.step` → LeRobot writer on disk ([schema / layout](../epic3/04-recording-lerobot.md)) → finalize → [§5 Verify](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset) → [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train).
+
 **Copy-paste commands** (session startup summary, `run_collect_dataset.sh`, merge, one-shot `record_dual_arm_vr.py`): [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr). Mid-session launch pointer: [§1.7](../IL_WORKFLOW_RUNBOOK.md#17-launch-teleop-or-recording-on-the-pc). On-disk layout: [Recording — LeRobot v3.0](../epic3/04-recording-lerobot.md#lerobot-dataset-v30-on-disk).
 
 Entrypoint: [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py). Defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps record cameras enabled, and shares the VR control loop from [VR teleoperation](03-vr-teleoperation.md).
