@@ -83,6 +83,8 @@ Episode discard on gamepad uses keyboard **M** only (no gamepad binding).
 
 Tune motion sensitivity with `--sensitivity`. For gamepad, `--gamepad_dead_zone` filters stick noise. Copy-paste launch: [§4 Keyboard / gamepad](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate).
 
+**Usability:** Low setup (no headset or wireless stack). Best for smoke tests and rapid iteration when a VR headset is unavailable. Side-by-side with VR: [Input device comparison](../epic4/05-findings-troubleshooting.md#input-device-comparison).
+
 ## VR teleoperation (summary)
 After keyboard/gamepad teleop worked on the pick-and-place task, the team added **Quest 3 + ALVR + OpenXR** teleoperation so both arms can be driven by hand tracking. Implementation lives in [VR teleoperation](../epic4/03-vr-teleoperation.md) (`teleop_dual_arm_vr.py`, `source/.../teleop/vr/`).
 
@@ -109,5 +111,6 @@ Full stack setup, CLI flags, and troubleshooting: [Epic 4 hub](../EPIC4_VR_INTEG
 ## Continue reading
 
 - [§2 Practice VR](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) / [§4 Keyboard teleop](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate)
+- [Input device comparison](../epic4/05-findings-troubleshooting.md#input-device-comparison)
 - [Recording (LeRobot)](04-recording-lerobot.md)
 - [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)

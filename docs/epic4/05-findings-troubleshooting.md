@@ -2,13 +2,20 @@
 
 ## Input device comparison
 
+Both paths drive the same task (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) and the same **16D IK-Abs** action into `env.step()` — only the input device differs ([Background and stack](02-background-and-stack.md), [Teleoperation (Epic 3)](../epic3/03-teleoperation.md)).
+
 | | Keyboard / gamepad | VR |
 |--|-------------------|-----|
 | Script | `teleop_dual_arm_switch.py` / `record_dual_arm.py` | `teleop_dual_arm_vr.py` / `record_dual_arm_vr.py` |
-| Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously (or lock to one with `--record_arm`) |
-| Recording | Supported alternate (`record_dual_arm.py`) | **Production path** for this project (`record_dual_arm_vr.py`, right-arm demos) |
-| Setup complexity | Low | Headset + ALVR + SteamVR |
-| Best suited for | Smoke tests, keyboard iteration without a headset | Operator demos feeding the reporting train set |
+| Arms controlled | One at a time (TAB / Y to switch) | Both simultaneously with `--dual_arm`, or locked to one arm (`--record_arm` / TAB in teleop) |
+| Input fidelity | Discrete key/stick deltas, fixed sensitivity | Continuous hand motion; pinch grippers |
+| Recording | Supported alternate (`record_dual_arm.py`) — smoke / tooling only | **Production path** for this project (`record_dual_arm_vr.py`, right-arm demos) |
+| Setup complexity | Low — no headset or streaming stack | High — Quest 3, ALVR, SteamVR, OpenXR, per-session order |
+| Network dependency | None | Stable **5 GHz** Wi-Fi (institutional networks may block peer-to-peer) |
+| Best suited for | Smoke tests, quick iteration without a headset | Operator demos feeding the reporting train set |
+| Known limitations | Not the production data-collection path | Unused-arm drift, setup friction, tracking jitter (needs `--pose_smoothing` / fine-tuning) |
+
+**Interpretation:** The shared 16D schema is deliberate — keyboard/gamepad and VR demos are structurally compatible at the action level, so VR collection builds on the Epic 3 teleop foundation without a new task or action space. Keyboard/gamepad stays simpler and more deterministic for engineering smoke tests; VR trades that simplicity for natural dual-arm / pinch control, which is why it became the production collection method despite setup cost, Wi-Fi dependency, and unused-arm drift ([Current limitations](#current-limitations)).
 
 ## Arm drift (not applicable)
 
