@@ -28,10 +28,6 @@ flowchart LR
   Hands --> HT --> Anchor --> Loop --> Env --> IK --> Arms
 ```
 
-> **Video placeholder:** `docs/assets/epic4/hand-anchored-demo.mp4` — short clip of hand-anchored teleop (TBD; link externally if the file is large).
->
-> *[Video TBD: hand-anchored VR teleop demo]*
-
 ## VR module package
 
 Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop entrypoint calls `run_vr_teleop_loop` in `loop.py`. Dataset collection uses [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py) with the same control loop plus `LeRobotRecorder` ([VR recording](04-vr-recording.md)).

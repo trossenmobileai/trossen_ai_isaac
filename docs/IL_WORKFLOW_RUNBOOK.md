@@ -50,33 +50,32 @@ Confirm Quest and workstation are on the **same** network ([one-time network not
 ### 1.2 Open ALVR on the headset; trust on the PC
 
 1. Workstation operator: start **ALVR Launcher** → **Launch** so the ALVR server UI is up.
+
+![Launch ALVR PC](assets/epic4/alvr-launch.png)
+
 2. Headset operator: open the **ALVR** app on the Quest.
 3. If the headset prompts you to open ALVR on the PC, the workstation operator should already have it running.
+
+![ALVR prompt on Quest](assets/epic4/alvr-trust-device-vr.jpg)
+
 4. On the PC ALVR **Devices** list, click **Trust** next to the Quest entry (required on first pairing; later sessions may auto-connect).
 
-> **Screenshot placeholder:** `docs/assets/epic4/alvr-trust-device.png` — ALVR PC Devices tab with Trust next to the Quest.
->
-> ![ALVR Trust device (placeholder)](assets/epic4/alvr-trust-device.png)
+![ALVR Trust device on PC](assets/epic4/alvr-trust-device-pc.png)
 
 ### 1.3 Room boundary (guardian)
 
 If the Quest detects obstacles or has no play area, it prompts for a **room boundary / guardian**. Follow the on-screen instructions until tracking space is accepted.
 
-> **Screenshot placeholder:** `docs/assets/epic4/quest-room-boundary.png` — Quest guardian / boundary setup screens.
->
-> ![Quest room boundary (placeholder)](assets/epic4/quest-room-boundary.png)
-
 ### 1.4 Launch SteamVR from ALVR
 
 1. On the PC ALVR UI, click **Launch SteamVR** (do **not** launch SteamVR only from the Steam library).
+
+![Launch SteamVR](assets/epic4/steamvr-launch.png)
+
 2. **First run:** after the device is listed, press **Trust** if still required; then SteamVR should bring the headset into the SteamVR environment.
 3. **Later runs:** if the headset was trusted before, SteamVR often starts and drops you on the SteamVR dashboard automatically.
 
 Only after SteamVR is up via ALVR is the headset reliably recognized by the PC VR stack.
-
-> **Screenshot placeholder:** `docs/assets/epic4/alvr-launch-steamvr.png` — ALVR UI “Launch SteamVR” control.
->
-> ![ALVR Launch SteamVR (placeholder)](assets/epic4/alvr-launch-steamvr.png)
 
 ### 1.5 Confirm both hands are tracked
 
@@ -89,9 +88,7 @@ If hands are missing:
 1. Ask the workstation operator to **restart SteamVR through ALVR**.
 2. If still broken: close SteamVR (Steam apps), close ALVR, then restart from [1.2](#12-open-alvr-on-the-headset-trust-on-the-pc) (ALVR → Launch SteamVR from ALVR → check hands again).
 
-> **Screenshot placeholder:** `docs/assets/epic4/steamvr-both-hands-tracked.png` — SteamVR view with two hand cursors visible.
->
-> ![SteamVR both hands tracked (placeholder)](assets/epic4/steamvr-both-hands-tracked.png)
+![SteamVR world](assets/epic4/steamvr-world.jpg)
 
 ### 1.6 Toggle SteamVR dashboard off
 
@@ -103,9 +100,7 @@ With hands tracked, the workstation operator clears the SteamVR dashboard overla
 
 Hands should remain tracked after the dashboard is hidden.
 
-> **Screenshot placeholder:** `docs/assets/epic4/steamvr-toggle-dashboard.png` — SteamVR window menu → Toggle Dashboard.
->
-> ![SteamVR Toggle Dashboard (placeholder)](assets/epic4/steamvr-toggle-dashboard.png)
+![SteamVR Toggle Dashboard](assets/epic4/steamvr-toggle-dashboard.png)
 
 ### 1.7 Launch teleop or recording on the PC
 
@@ -118,18 +113,12 @@ Workstation operator starts Isaac from the clone root (paths are examples). Copy
 
 In the **Isaac Sim** window (once the app is up from the script):
 
-1. Set **Output Plugin** = **OpenXR** (viewport / XR output controls — see screenshots below).
+1. Set **Output Plugin** = **OpenXR** (viewport / XR output controls — see screenshot below).
 2. Click **Start AR**.
 
 The headset should leave the SteamVR home and show the simulation stereo view.
 
-> **Screenshot placeholder:** `docs/assets/epic4/isaac-sim-main-window.png` — Full Isaac Sim main window during VR teleop/recording (orientation for where XR controls live).
->
-> ![Isaac Sim main window (placeholder)](assets/epic4/isaac-sim-main-window.png)
-
-> **Screenshot placeholder:** `docs/assets/epic4/isaac-output-plugin-openxr-start-ar.png` — Close-up: Output Plugin = OpenXR and **Start AR** control in the Isaac Sim UI.
->
-> ![Isaac Start AR (placeholder)](assets/epic4/isaac-output-plugin-openxr-start-ar.png)
+![Isaac Sim main window](assets/epic4/isaacsim-main-window.png)
 
 ### 1.9 POV reset if the first spawn looks wrong
 

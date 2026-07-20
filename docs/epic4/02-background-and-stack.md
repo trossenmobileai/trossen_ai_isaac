@@ -44,10 +44,6 @@ flowchart LR
   Quest3 --> ALVR --> SteamVR --> OpenXR --> IsaacSim --> IsaacLab --> TeleopVR --> MobileAI
 ```
 
-> **Screenshot placeholder:** `docs/assets/epic4/vr-stack-annotated.png` — optional annotated photo of the live stack (ALVR + SteamVR + Isaac) for BookStack.
->
-> ![VR stack annotated (placeholder)](../assets/epic4/vr-stack-annotated.png)
-
 ### Why this stack
 
 No single product gives **Quest wireless streaming** and **Isaac Lab hand retargeting** into the Mobile AI IK task. The chain above exists because each hop owns one concern; Isaac Sim never talks to the Quest or ALVR directly.

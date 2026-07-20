@@ -191,9 +191,7 @@ The pick-and-place digital twin is assembled in [`reach_env_cfg.py`](../../sourc
 
 **Why randomize:** imitation-learning policies trained on the recorded LeRobot set ([Recording](04-recording-lerobot.md)) need the cube in varied positions and colors; a fixed pick point / color overfits and fails closed-loop eval ([Evaluation](06-evaluation.md)). Position/color resampling on every `env.reset()` (including workstation **J**) is downstream of that requirement.
 
-> **Screenshot placeholder:** `docs/assets/epic3/mobile-ai-pick-place-scene.png` — Isaac Sim view of Mobile AI, table, and cube (pick-and-place digital twin).
->
-> ![Mobile AI pick-and-place scene (placeholder)](../assets/epic3/mobile-ai-pick-place-scene.png)
+![Mobile AI pick-and-place scene](../assets/epic3/mobile-ai-pick-place-scene.png)
 
 ```mermaid
 ---

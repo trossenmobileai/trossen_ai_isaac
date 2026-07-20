@@ -47,10 +47,6 @@ flowchart LR
     L_Sidecar_Rollout_0@{ curve: natural }
 ```
 
-> **Screenshot placeholder:** `docs/assets/epic3/eval-isaac-viewport.png` — Isaac Sim viewport during a closed-loop eval episode.
->
-> ![Eval Isaac viewport (placeholder)](../assets/epic3/eval-isaac-viewport.png)
-
 **Real robot vs sim**
 
 | Real robot | Simulation (this repo) |

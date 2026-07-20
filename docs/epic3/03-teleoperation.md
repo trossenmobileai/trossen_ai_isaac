@@ -40,10 +40,6 @@ Device motion deltas and gripper toggles are assembled into the **16D** layout (
 
 Periodic `[step=...]` status lines (arm / grip / pose every 60 sim steps) are **off by default**. Pass `--step_log` to enable them. Key-event logs (`[ARM SWITCH]`, `[GRIPPER]`, `[RECORD]`, `[RESET]`, …) still print as usual.
 
-> **Screenshot placeholder:** `docs/assets/epic3/keyboard-teleop-viewport.png` — Isaac Sim viewport during keyboard/gamepad teleop.
->
-> ![Keyboard teleop viewport (placeholder)](../assets/epic3/keyboard-teleop-viewport.png)
-
 **Input devices:** keyboard or gamepad via `--teleop_device`. Motion deltas apply to the **active arm only** while teleoperation is active (`TeleopSession.teleoperation_active`, on by default). Bindings combine Isaac Lab `Se3Keyboard` / `Se3Gamepad` defaults with fork-specific callbacks in `se3_switch.py` (`gripper_term=False` in the env config; grippers are toggled via **K** / **A** instead). This project does not use SpaceMouse for Mobile AI teleoperation.
 
 **Keyboard** (`--teleop_device keyboard`):

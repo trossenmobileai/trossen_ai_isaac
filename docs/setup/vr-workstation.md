@@ -29,13 +29,7 @@ Official first-run guide: [Getting started with Meta Quest 3](https://www.meta.c
 2. Enable **Hand Tracking** and **Auto Switch between Hands and Controllers** (Quest Settings → Movement / Hands — exact labels vary by OS version).
 3. Install the **ALVR** client on the headset (Meta Store listing or the sideload path your team uses for the matching ALVR server version).
 
-> **Screenshot placeholder:** `docs/assets/epic4/quest-hand-tracking-settings.png` — Quest hand-tracking toggles.
->
-> ![Quest hand tracking settings (placeholder)](../assets/epic4/quest-hand-tracking-settings.png)
-
-> **Screenshot placeholder:** `docs/assets/epic4/quest-alvr-app-installed.png` — ALVR app icon on the Quest home.
->
-> ![Quest ALVR app installed (placeholder)](../assets/epic4/quest-alvr-app-installed.png)
+![Quest ALVR app installed](../assets/epic4/quest-alvr-app-installed.jpg)
 
 ### Workstation: Steam and SteamVR
 
@@ -60,10 +54,6 @@ find ~ -name "vrcompositor-launcher" 2>/dev/null
 ~/.steam/debian-installation/steamapps/common/SteamVR/bin/vrmonitor.sh %command%
 ```
 
-> **Screenshot placeholder:** `docs/assets/epic4/steamvr-launch-options.png` — SteamVR Properties → Launch Options field filled in.
->
-> ![SteamVR launch options (placeholder)](../assets/epic4/steamvr-launch-options.png)
-
 ### Workstation: ALVR server
 
 1. Install **ALVR** (Launcher / server) for Linux from the [ALVR project releases](https://github.com/alvr-org/ALVR/releases) matching the Quest client version.
@@ -83,10 +73,6 @@ find ~ -name "vrcompositor-launcher" 2>/dev/null
 
 3. In the ALVR dashboard: set **Hand Tracking** interaction to **SteamVR Input 2.0**.
 
-> **Screenshot placeholder:** `docs/assets/epic4/alvr-dashboard-hand-tracking.png` — ALVR dashboard Hand Tracking → SteamVR Input 2.0.
->
-> ![ALVR dashboard hand tracking (placeholder)](../assets/epic4/alvr-dashboard-hand-tracking.png)
-
 ### SteamVR as OpenXR runtime
 
 Isaac Sim talks to **OpenXR**, not to ALVR’s API. Point the system OpenXR runtime at SteamVR:
@@ -99,10 +85,6 @@ Isaac Sim talks to **OpenXR**, not to ALVR’s API. Point the system OpenXR runt
 cat ~/.config/openxr/1/active_runtime.json
 # Must show "name": "SteamVR"
 ```
-
-> **Screenshot placeholder:** `docs/assets/epic4/steamvr-set-openxr-runtime.png` — SteamVR Developer setting “Set SteamVR as OpenXR Runtime”.
->
-> ![SteamVR set OpenXR runtime (placeholder)](../assets/epic4/steamvr-set-openxr-runtime.png)
 
 ### One-time smoke (before Isaac)
 
