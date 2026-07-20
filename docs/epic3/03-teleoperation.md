@@ -93,7 +93,7 @@ Epic 3 keeps only this summary:
 - **Hands:** pinch = gripper. (Kit binds **R**, so reset is **J**.)
 - Operator ritual and expected terminal logs: [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator) · [Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference).
 
-Full stack setup, CLI flags, and troubleshooting: [Epic 4 hub](../EPIC4_VR_INTEGRATION.md), [VR one-time setup](../setup/vr-workstation.md), [§1 session](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time), [Findings](../epic4/05-findings-troubleshooting.md).
+Full stack setup, CLI flags, and troubleshooting: [Epic 4 design](../epic4/README.md), [VR one-time setup](../setup/vr-workstation.md), [§1 session](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time), [Findings](../epic4/05-findings-troubleshooting.md).
 
 
 ---
@@ -109,4 +109,4 @@ Full stack setup, CLI flags, and troubleshooting: [Epic 4 hub](../EPIC4_VR_INTEG
 - [§2 Practice VR](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) / [§4 Keyboard teleop](../IL_WORKFLOW_RUNBOOK.md#4-collect-demos-keyboard-gamepad-alternate)
 - [Input device comparison](../epic4/05-findings-troubleshooting.md#input-device-comparison)
 - [Recording (LeRobot)](04-recording-lerobot.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

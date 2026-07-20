@@ -49,4 +49,4 @@ Shared abbreviations and terms for the Mobile AI simulation / IL docs.
 
 - [Tasks and scene](02-tasks-and-scene.md)
 - [§0 Prerequisites](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

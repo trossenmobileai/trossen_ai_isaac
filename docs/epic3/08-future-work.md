@@ -26,4 +26,4 @@ Derived from open items in [Findings and Troubleshooting](07-findings-troublesho
 - [Findings and Troubleshooting](07-findings-troubleshooting.md)
 - [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop) · [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
 - [Epic 4 — Future work](../epic4/06-future-work.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

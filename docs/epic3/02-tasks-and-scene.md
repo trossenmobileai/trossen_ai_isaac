@@ -283,4 +283,4 @@ Code-level overview of the same classes: [`reach_env_cfg.py`](#reach_env_cfgpy-s
 - [§0 Prerequisites](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
 - [Findings — scene and randomization](07-findings-troubleshooting.md#scene-and-randomization)
 - [Teleoperation](03-teleoperation.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

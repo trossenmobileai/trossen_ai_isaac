@@ -158,4 +158,4 @@ Runnable **scripts** live under `scripts/`; reusable **library code** lives in t
 
 - [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [§5 Verify](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset) · [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train)
 - [Training](05-training.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

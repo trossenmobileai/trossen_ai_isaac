@@ -156,4 +156,4 @@ Connectivity issues above (setcap through POV) also affect recording sessions �
 - [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)
 - [§2 Practice](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) / [§3 Collect](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr)
 - [Future work](06-future-work.md)
-- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
+- [Epic 4 design index](README.md)

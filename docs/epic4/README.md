@@ -2,7 +2,7 @@
 
 Design chapters for Quest 3 / ALVR / SteamVR / OpenXR teleoperation and VR + LeRobot recording on the Mobile AI.
 
-**BookStack book intro:** [Epic 4 hub](../EPIC4_VR_INTEGRATION.md) (keep that file for upload). **Full goals / timelines:** [docs index](../README.md#epic-4-vr-integration). **One-time VR host:** [VR workstation setup](../setup/vr-workstation.md). **Every session:** [runbook §1](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) → [§2](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) → [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
+**Full goals / timelines:** [docs index](../README.md#epic-4-vr-integration). **One-time VR host:** [VR workstation setup](../setup/vr-workstation.md). **Every session:** [runbook §1](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) → [§2](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) → [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
 
 ## Start here
 
@@ -30,4 +30,4 @@ Design chapters for Quest 3 / ALVR / SteamVR / OpenXR teleoperation and VR + LeR
 - [Docs index](../README.md)
 - [Setup hub](../setup/README.md) · [VR workstation](../setup/vr-workstation.md)
 - [IL Workflow Runbook](../IL_WORKFLOW_RUNBOOK.md)
-- [Epic 3 design](../epic3/README.md) · [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design](../epic3/README.md)

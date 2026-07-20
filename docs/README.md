@@ -4,7 +4,7 @@ Repo index for the **Trossen Mobile AI** imitation-learning docs. Content is org
 
 | Lane | Purpose | Where |
 |------|---------|--------|
-| **Design** | What was built and why | [`epic3/`](epic3/README.md), [`epic4/`](epic4/README.md) design chapters, hubs, [ACT report](ACT_EVAL_REPORT_100K.md) |
+| **Design** | What was built and why | [`epic3/`](epic3/README.md), [`epic4/`](epic4/README.md) design chapters, [ACT report](ACT_EVAL_REPORT_100K.md) |
 | **One-time setup** | New workstation / re-image only | [`setup/`](setup/README.md) · [Isaac & envs](setup/isaac-and-environments.md) · [VR workstation](setup/vr-workstation.md) |
 | **Day-to-day runbook** | Every session: operate sim / teleop / record / train / eval | [IL Workflow Runbook](IL_WORKFLOW_RUNBOOK.md) (§0–§7) |
 
@@ -16,7 +16,7 @@ Repo index for the **Trossen Mobile AI** imitation-learning docs. Content is org
 | **[Epic 4 pages](epic4/README.md)** | Design: glossary, stack, VR teleop/recording, findings |
 | **[IL Workflow Runbook](IL_WORKFLOW_RUNBOOK.md)** | **Runbook:** session → practice → collect → verify → train → eval |
 | **[ACT Evaluation Report](ACT_EVAL_REPORT_100K.md)** | Closed-loop ACT 100k / 30-episode results |
-| [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [Epic 4 hub](EPIC4_VR_INTEGRATION.md) | **BookStack book intros** (short; full story in sections below) |
+| [Epic 3 consolidated](EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [Epic 4 consolidated](EPIC4_VR_INTEGRATION.md) | Optional single-file copies of `epic3/` / `epic4/` design (for external wiki upload) |
 
 ## Who this is for
 

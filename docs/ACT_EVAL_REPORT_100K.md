@@ -62,5 +62,5 @@ Reproduce or extend the run with [§7 Evaluate](IL_WORKFLOW_RUNBOOK.md#7-evaluat
 - [Evaluation](epic3/06-evaluation.md)
 - [§6 Train](IL_WORKFLOW_RUNBOOK.md#6-train)
 - [Docs index](README.md)
-- [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design](epic3/README.md)
 

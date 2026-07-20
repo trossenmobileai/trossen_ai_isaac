@@ -118,4 +118,4 @@ Copy-paste policy training (wrappers + framing): [§6 Train](../IL_WORKFLOW_RUNB
 - [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train) · [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
 - [Evaluation](06-evaluation.md)
 - [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

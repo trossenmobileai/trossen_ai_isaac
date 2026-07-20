@@ -31,4 +31,4 @@ VR-specific abbreviations and terms. Shared IL terms (IK, IK-Abs, 16D, OpenXR, e
 - [VR workstation one-time setup](../setup/vr-workstation.md)
 - [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time)
 - [§2 Practice VR teleop](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset)
-- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
+- [Epic 4 design index](README.md)

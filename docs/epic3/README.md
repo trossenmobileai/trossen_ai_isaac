@@ -2,7 +2,7 @@
 
 Design chapters for the Mobile AI digital twin, teleoperation, LeRobot recording, training, and closed-loop evaluation.
 
-**BookStack book intro:** [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md) (keep that file for upload). **Full goals / timelines / checklist:** [docs index](../README.md#epic-3-simulation-training-pipeline). **Day-to-day commands:** [IL Workflow Runbook](../IL_WORKFLOW_RUNBOOK.md). **New machine:** [setup](../setup/README.md).
+**Full goals / timelines / checklist:** [docs index](../README.md#epic-3-simulation-training-pipeline). **Day-to-day commands:** [IL Workflow Runbook](../IL_WORKFLOW_RUNBOOK.md). **New machine:** [setup](../setup/README.md).
 
 ## Start here
 
@@ -31,4 +31,4 @@ Design chapters for the Mobile AI digital twin, teleoperation, LeRobot recording
 - [Docs index](../README.md)
 - [Setup hub](../setup/README.md)
 - [IL Workflow Runbook](../IL_WORKFLOW_RUNBOOK.md)
-- [Epic 4 design](../epic4/README.md) · [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
+- [Epic 4 design](../epic4/README.md)

@@ -90,4 +90,4 @@ Both `record_dual_arm_vr.py` and `teleop_dual_arm_vr.py` accept this flag.
 - [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [§5 Verify](../IL_WORKFLOW_RUNBOOK.md#5-verify-dataset) · [§6 Train](../IL_WORKFLOW_RUNBOOK.md#6-train)
 - [Recording (LeRobot)](../epic3/04-recording-lerobot.md) (design)
 - [Findings and troubleshooting](05-findings-troubleshooting.md)
-- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
+- [Epic 4 design index](README.md)

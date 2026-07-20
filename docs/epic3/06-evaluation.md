@@ -137,4 +137,4 @@ Evaluate **your** checkpoint with the ACT or Pi0 play wrappers (checkpoint path,
 - [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
 - [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)
 - [Findings and troubleshooting](07-findings-troubleshooting.md)
-- [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
+- [Epic 3 design index](README.md)

@@ -24,4 +24,4 @@ Policy closed-loop eval (ACT report, Pi0 unblock) is tracked under [Epic 3 futur
 - [Findings and Troubleshooting](05-findings-troubleshooting.md)
 - [§3 Collect VR](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [§2 Practice](../IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset)
 - [Epic 3 — Future work](../epic3/08-future-work.md)
-- [Epic 4 hub](../EPIC4_VR_INTEGRATION.md)
+- [Epic 4 design index](README.md)
