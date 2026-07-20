@@ -4,7 +4,7 @@ Repo index for the **Trossen Mobile AI** imitation-learning docs. Content is org
 
 | Lane | Purpose | Where |
 |------|---------|--------|
-| **Design** | What was built and why | [`epic3/`](epic3/), [`epic4/`](epic4/) design chapters, hubs, [ACT report](ACT_EVAL_REPORT_100K.md) |
+| **Design** | What was built and why | [`epic3/`](epic3/README.md), [`epic4/`](epic4/README.md) design chapters, hubs, [ACT report](ACT_EVAL_REPORT_100K.md) |
 | **One-time setup** | New workstation / re-image only | [`setup/`](setup/README.md) · [Isaac & envs](setup/isaac-and-environments.md) · [VR workstation](setup/vr-workstation.md) |
 | **Day-to-day runbook** | Every session: operate sim / teleop / record / train / eval | [IL Workflow Runbook](IL_WORKFLOW_RUNBOOK.md) (§0–§7) |
 
@@ -12,8 +12,8 @@ Repo index for the **Trossen Mobile AI** imitation-learning docs. Content is org
 |-----|----------------|
 | **This page** | Goals, timelines, page maps, environment, smoke checklist |
 | **[Setup hub](setup/README.md)** | One-time Isaac + VR host setup |
-| **[Epic 3 pages](epic3/)** | Design: glossary, tasks/scene, teleop, recording, training, evaluation, findings |
-| **[Epic 4 pages](epic4/)** | Design: glossary, stack, VR teleop/recording, findings |
+| **[Epic 3 pages](epic3/README.md)** | Design: glossary, tasks/scene, teleop, recording, training, evaluation, findings |
+| **[Epic 4 pages](epic4/README.md)** | Design: glossary, stack, VR teleop/recording, findings |
 | **[IL Workflow Runbook](IL_WORKFLOW_RUNBOOK.md)** | **Runbook:** session → practice → collect → verify → train → eval |
 | **[ACT Evaluation Report](ACT_EVAL_REPORT_100K.md)** | Closed-loop ACT 100k / 30-episode results |
 | [Epic 3 hub](EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [Epic 4 hub](EPIC4_VR_INTEGRATION.md) | **BookStack book intros** (short; full story in sections below) |
@@ -27,7 +27,7 @@ New team members, stakeholders, and contributors who need to understand what was
 1. **This page** — goals, timelines, page maps (below)
 2. **New machine?** [Setup hub](setup/README.md) first; **same machine?** skip to runbook
 3. **[IL Workflow Runbook](IL_WORKFLOW_RUNBOOK.md)** — day-to-day ([§0](IL_WORKFLOW_RUNBOOK.md#0-prerequisites)–[§7](IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop))
-4. Drill into [`epic3/`](epic3/) / [`epic4/`](epic4/) design chapters as needed
+4. Drill into [`epic3/`](epic3/README.md) / [`epic4/`](epic4/README.md) design chapters as needed
 5. **[ACT Evaluation Report](ACT_EVAL_REPORT_100K.md)** — reporting metrics
 
 ---
@@ -83,7 +83,7 @@ flowchart TD
 | [Recording (LeRobot)](epic3/04-recording-lerobot.md) | Pipeline, action labels, Dataset v3.0 on disk |
 | [Training](epic3/05-training.md) | ACT / Pi0 jobs and hyperparameters |
 | [Evaluation](epic3/06-evaluation.md) | How eval works, success criteria, metrics |
-| [Findings and troubleshooting](epic3/07-findings-troubleshooting.md) | Limitations and fixes |
+| [Findings and troubleshooting](epic3/07-findings-troubleshooting.md) | Issues addressed, limitations, and fixes |
 | [Future work](epic3/08-future-work.md) | Planned follow-ups |
 
 ---
@@ -138,7 +138,7 @@ flowchart TD
 | [Background and stack](epic4/02-background-and-stack.md) | Epic 3 integration + VR stack (why each hop) |
 | [VR teleoperation](epic4/03-vr-teleoperation.md) | Module, wiring, keys, CLI (design) |
 | [VR recording](epic4/04-vr-recording.md) | Dataset modes, shards, smoothing (design) |
-| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Limitations, debug order, VR/ALVR fixes |
+| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Issues addressed, limitations, debug order, VR/ALVR fixes |
 | [Future work](epic4/06-future-work.md) | Follow-ups |
 
 ---

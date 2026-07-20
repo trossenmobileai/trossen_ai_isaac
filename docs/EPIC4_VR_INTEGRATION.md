@@ -1,6 +1,6 @@
 # Epic 4 — VR Integration
 
-> **Document status:** **BookStack book intro** for Epic 4 (keep this file when uploading). **Canonical narrative** (goals, timelines, checklist): [docs index](README.md). Design pages: [`epic4/`](epic4/). **One-time VR host:** [setup/vr-workstation](setup/vr-workstation.md). **Day-to-day:** [runbook §1](IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) → [§2](IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) → [§3](IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
+> **Document status:** **BookStack book intro** for Epic 4 (keep this file when uploading). **Canonical narrative** (goals, timelines, checklist): [docs index](README.md). Design pages: [`epic4/`](epic4/README.md). **One-time VR host:** [setup/vr-workstation](setup/vr-workstation.md). **Day-to-day:** [runbook §1](IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) → [§2](IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) → [§3](IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr).
 
 ## Goal
 
@@ -25,7 +25,7 @@ Full timeline and overview: [docs index — Epic 4](README.md#epic-4-vr-integrat
 | [Background and stack](epic4/02-background-and-stack.md) | Epic 3 integration + VR stack (why each hop) |
 | [VR teleoperation](epic4/03-vr-teleoperation.md) | Module, wiring, CLI (design) |
 | [VR recording](epic4/04-vr-recording.md) | Dataset modes, shards, smoothing (design) |
-| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Limitations, debug order, VR/ALVR fixes |
+| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Issues addressed, limitations, debug order, VR/ALVR fixes |
 | [Future work](epic4/06-future-work.md) | Follow-ups |
 
 ## Continue reading

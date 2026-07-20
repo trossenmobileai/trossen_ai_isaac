@@ -8,7 +8,7 @@ Use this lane when bringing up a **new workstation** or after a re-image. If the
 |-----------|------------|
 | New PC / re-image / first clone | Complete the checklist below |
 | Same validated workstation | [IL Workflow Runbook](../IL_WORKFLOW_RUNBOOK.md) only |
-| Understanding *why* (not how to install) | Design: [`docs/epic3/`](../epic3/), [`docs/epic4/`](../epic4/) |
+| Understanding *why* (not how to install) | Design: [`docs/epic3/`](../epic3/README.md), [`docs/epic4/`](../epic4/README.md) |
 
 ## Checklist
 

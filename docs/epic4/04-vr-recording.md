@@ -43,7 +43,7 @@ flowchart TB
 
 All three modes produce a standard [LeRobot Dataset v3.0](https://huggingface.co/docs/lerobot/en/lerobot-dataset-v3); only feature dimensions and `observation.images.*` cameras differ.
 
-**This project’s reporting set** used `--record_arm right` — see [runbook project example reference](../IL_WORKFLOW_RUNBOOK.md). Unused-arm drift is why single-arm lock is common; bimanual remains a limitation ([Findings](05-findings-troubleshooting.md)).
+**This project’s reporting set** used `--record_arm right` — see [runbook project example reference](../IL_WORKFLOW_RUNBOOK.md). Unused-arm drift is why single-arm lock is common; bimanual remains a limitation ([Findings — unused-arm drift](05-findings-troubleshooting.md#unused-arm-drift-and-record_arm-right)).
 
 ## Multi-session collection (shard-then-merge)
 

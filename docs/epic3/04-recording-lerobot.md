@@ -129,7 +129,7 @@ Motion keys: full table in [Teleoperation](03-teleoperation.md).
 
 Quick reference for all devices: [IL runbook — Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference).
 
-**LeRobot dependency:** LeRobot is not bundled in Isaac Sim Python. It is installed separately for recording (`lerobot==0.4.4` in Isaac Sim Python 3.11), dataset verification (`~/lerobot_trossen/.venv`), and training (`lerobot_train` conda environment).
+**LeRobot dependency:** LeRobot is not bundled in Isaac Sim Python. It is installed separately for recording (`lerobot==0.4.4` in Isaac Sim Python 3.11), dataset verification (`~/lerobot_trossen/.venv`), and training (`lerobot_train` conda environment). Why three toolchains (and classic interpreter mistakes): [Findings — Three Python environments](07-findings-troubleshooting.md#three-python-environments).
 
 
 ## Repository map

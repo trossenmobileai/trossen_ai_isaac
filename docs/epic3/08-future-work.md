@@ -1,6 +1,6 @@
 # Future Work
 
-Derived from open items in [Findings and Troubleshooting](07-findings-troubleshooting.md) (resolved issues and locked eval early-stop behavior are not repeated here).
+Derived from open items in [Findings and Troubleshooting](07-findings-troubleshooting.md) (resolved issues under [Issues addressed](07-findings-troubleshooting.md#issues-addressed-during-development) / [Eval and policy sidecar](07-findings-troubleshooting.md#eval-and-policy-sidecar); locked eval early-stop behavior is not repeated here).
 
 ## Simulation and transfer
 
@@ -12,11 +12,11 @@ Derived from open items in [Findings and Troubleshooting](07-findings-troublesho
 ## Teleoperation and demos
 
 - [ ] **Keyboard / gamepad teleop fine-tuning** — gains and smoothing for smoother operator motion ([Teleoperation](03-teleoperation.md); VR tracking work lives in [Epic 4 future work](../epic4/06-future-work.md))
-- [ ] **Broader demonstration coverage** — production train set is VR right-arm only; expand modalities / arms once collection quality allows ([Recording](04-recording-lerobot.md), [Epic 4](../epic4/06-future-work.md))
+- [ ] **Broader demonstration coverage** — production train set is VR right-arm only; expand modalities / arms once collection quality allows ([Recording](04-recording-lerobot.md), [Epic 4 — unused-arm drift](../epic4/05-findings-troubleshooting.md#unused-arm-drift-and-record_arm-right))
 
 ## Training and evaluation
 
-- [ ] **Unblock Pi0 closed-loop sim eval** — Inductor/Triton AUTOTUNE exceeds the 120 s sidecar timeout on first step ([Evaluation](06-evaluation.md) / [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop))
+- [ ] **Unblock Pi0 closed-loop sim eval** — Inductor/Triton AUTOTUNE exceeds the 120 s sidecar timeout on first step ([Eval and policy sidecar](07-findings-troubleshooting.md#eval-and-policy-sidecar) · [Evaluation](06-evaluation.md) / [§7 Evaluate](../IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop))
 - [ ] **Optional eval LeRobot datasets** — closed-loop rollout is metrics-only today; optional `eval_*` dataset writing like some real-robot flows
 - [ ] **Richer task success metrics** — Reach recording is an IL sandbox without automated success; broaden manipulation goals / metrics beyond pick–lift–place ([Evaluation](06-evaluation.md))
 - [ ] **Improve ACT approach / grasp success** — reporting failures are mostly `no_progress` (never lift); see [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md)

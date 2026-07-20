@@ -47,7 +47,7 @@ Logic lives in `source/trossen_ai_isaac/trossen_ai_isaac/teleop/vr/`. The teleop
 
 **Re-anchor (**B**):** clears the hand↔EE snapshot and pose-smoothing filter, then re-snapshots head yaw + hand/EE on the next active frame so “forward relative to the headset” maps to robot-forward again — **without** pausing or resetting the environment. Also happens automatically after pause/resume (next engage) and after environment reset. Full operator ritual (C-shape hands, stay still, slow motion): [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator).
 
-**Absolute mode:** `--anchor_mode absolute` feeds hand pose directly as the IK target. Intended for humanoid avatars; not recommended for Mobile AI room-scale use.
+**Absolute mode:** `--anchor_mode absolute` feeds hand pose directly as the IK target. Intended for humanoid avatars; not recommended for Mobile AI room-scale use — [Findings — hand-anchored vs absolute](05-findings-troubleshooting.md#hand-anchored-vs-absolute-anchor-mode).
 
 **Grippers:** Pinch gesture (thumb-index distance) opens or closes each hand's gripper via `GripperRetargeter`.
 

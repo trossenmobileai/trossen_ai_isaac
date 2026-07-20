@@ -1,6 +1,6 @@
 # Epic 3 — Simulation Training Pipeline
 
-> **Document status:** **BookStack book intro** for Epic 3 (keep this file when uploading). **Canonical narrative** (goals, timelines, environment, checklist): [docs index](README.md). Detailed design: [`epic3/`](epic3/). **Setup:** [docs/setup](setup/README.md). **Runbook:** [IL runbook](IL_WORKFLOW_RUNBOOK.md). Pi0 sim eval remains deferred.
+> **Document status:** **BookStack book intro** for Epic 3 (keep this file when uploading). **Canonical narrative** (goals, timelines, environment, checklist): [docs index](README.md). Detailed design: [`epic3/`](epic3/README.md). **Setup:** [docs/setup](setup/README.md). **Runbook:** [IL runbook](IL_WORKFLOW_RUNBOOK.md). Pi0 sim eval remains deferred.
 
 ## Goal
 
@@ -27,7 +27,7 @@ Full timeline and overview: [docs index — Epic 3](README.md#epic-3-simulation-
 | [Recording (LeRobot)](epic3/04-recording-lerobot.md) | Pipeline, action labels, Dataset v3.0 on disk |
 | [Training](epic3/05-training.md) | ACT / Pi0 jobs and hyperparameters |
 | [Evaluation](epic3/06-evaluation.md) | How eval works, success criteria, metrics |
-| [Findings and troubleshooting](epic3/07-findings-troubleshooting.md) | Limitations and fixes |
+| [Findings and troubleshooting](epic3/07-findings-troubleshooting.md) | Issues addressed, limitations, and fixes |
 | [Future work](epic3/08-future-work.md) | Planned follow-ups |
 
 ## Continue reading

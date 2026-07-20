@@ -19,19 +19,59 @@ Both paths drive the same task (`Isaac-Reach-MobileAI-IK-Abs-Play-v0`) and the s
 
 ## Arm drift (not applicable)
 
-The IK-Rel arm drift issue documented in [Epic 3 Findings](../epic3/07-findings-troubleshooting.md) was resolved by switching to IK-Abs. It does not apply to the current IK-Abs + VR setup.
+The IK-Rel arm drift issue documented in [Epic 3 Findings](../epic3/07-findings-troubleshooting.md#arm-drift-resolved) was resolved by switching to IK-Abs. It does not apply to the current IK-Abs + VR setup.
+
+## Issues addressed / design decisions
+
+### ALVR vs cloud XR streaming
+
+**Problem:** Need wireless Quest streaming into Isaac Lab hand retargeting without a cloud dependency.
+
+**Decision:** Use **ALVR** on the local workstation (hours to stand up; no cloud infrastructure). A more integrated path (e.g. NVIDIA CloudXR) was deferred — [Future work](06-future-work.md#stack-and-operations). Stack rationale: [Background and stack](02-background-and-stack.md).
+
+### SteamVR must launch from ALVR
+
+**Problem:** SteamVR often exited after a few seconds, or Isaac never saw a stable headset, when SteamVR was started only from the Steam library.
+
+**Cause:** ALVR registers as a SteamVR driver; the session is order-sensitive (ALVR Server → Launch SteamVR **from ALVR** → Isaac).
+
+**Resolution:** Documented one-time launch options / driver settings ([VR workstation setup](../setup/vr-workstation.md)) and every-session rule ([§1.4](../IL_WORKFLOW_RUNBOOK.md#14-launch-steamvr-from-alvr)). Symptom rows: [Symptom table](#symptom-table).
+
+### Hand-anchored vs absolute anchor mode
+
+**Problem:** `--anchor_mode absolute` (hand pose = IK target) produced unnatural motion on the Mobile AI room-scale dual-arm setup.
+
+**Cause:** Absolute mode targets humanoid-avatar style retargeting, not relative hand↔EE mapping for a fixed-base teleop scene.
+
+**Resolution:** Default `--anchor_mode hand_anchored`; re-anchor with **B**. Absolute remains available but is not recommended — [VR teleoperation](03-vr-teleoperation.md). Symptom row: [Symptom table](#symptom-table).
+
+### Unused-arm drift and `--record_arm right`
+
+**Problem:** When the operator focuses on one hand, the less-attended tracked hand wanders and the unused arm drifts — contaminating bimanual demos.
+
+**Mitigation:** Production / reporting collection locked `--record_arm right` (7D + `cam_high` + `cam_right_wrist`). Full reliable bimanual VR recording remains open — [Current limitations](#current-limitations) / [Future work](06-future-work.md#demonstration-collection). Design: [VR recording](04-vr-recording.md#one-arm-vs-two-arm-record_arm).
+
+### Dataset root: no append, shards, and `--overwrite`
+
+**Problem:** Re-opening a finalized LeRobot Dataset v3.0 folder to append fails; re-using the same `--root` without care raises `FileExistsError` or risks wiping data.
+
+**Cause:** `finalize()` permanently closes parquet writers. `--overwrite` deletes an existing root — it does not append.
+
+**Resolution:** Multi-session **shard-then-merge** (`run_collect_dataset.sh` → `run_merge_dataset.sh`); single-session re-create only with `--overwrite` or a new `--root` — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [VR recording](04-vr-recording.md#multi-session-collection-shard-then-merge). Index rows: [Recording-specific](#recording-specific-index).
+
+### Two-operator VR sessions
+
+**Problem:** One person cannot reliably wear the Quest and drive workstation keys / ALVR / Start AR at once.
+
+**Resolution:** Treat **headset operator** and **workstation operator** as distinct roles (not a software bug) — [§1 Roles](../IL_WORKFLOW_RUNBOOK.md#roles). Engage ritual: [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator).
 
 ## Current limitations
 
-- **Right-arm focus for production demos:** unused-arm tracking drifts when the operator concentrates on the active hand; this project recorded `--record_arm right` only
-- **Setup complexity:** VR requires ALVR, SteamVR, Quest 3, and per-session startup steps
+- **Right-arm focus for production demos:** unused-arm tracking drifts when the operator concentrates on the active hand; this project recorded `--record_arm right` only — [Unused-arm drift](#unused-arm-drift-and-record_arm-right)
+- **Setup complexity:** VR requires ALVR, SteamVR, Quest 3, and per-session startup steps — [SteamVR from ALVR](#steamvr-must-launch-from-alvr) · [Two-operator sessions](#two-operator-vr-sessions)
 - **Network dependency:** ALVR requires stable 5 GHz Wi-Fi; institutional networks may block peer-to-peer traffic
 - **VR teleop / tracking fine-tuning still needed:** hand-anchored mapping, `--pose_smoothing`, unused-arm drift, and session ergonomics still need tuning for smoother demos ([VR teleoperation](03-vr-teleoperation.md), [VR session startup (§1)](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time); also [Epic 3 findings](../epic3/07-findings-troubleshooting.md))
 - **Sim policy evaluation lives in Epic 3:** closed-loop ACT eval is in [Evaluation](../epic3/06-evaluation.md) and the [ACT Evaluation Report](../ACT_EVAL_REPORT_100K.md) (trained on this VR-collected right-arm set)
-
-## Design notes
-
-**ALVR selection:** ALVR was chosen because it requires no cloud infrastructure and can be set up on a local workstation in hours. A more integrated path (e.g. NVIDIA CloudXR) may be evaluated later.
 
 ## Troubleshooting (VR / ALVR)
 
@@ -78,7 +118,7 @@ Exact ALVR port numbers vary by release; if `ufw` is active, allow ALVR’s disc
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `setcap` fails (file not found) | SteamVR install path differs | `find ~ -name "vrcompositor-launcher"` and use the returned path |
-| SteamVR closes after a few seconds | Launched from Steam instead of ALVR | Launch SteamVR **from ALVR**; confirm launch option is set ([one-time setup](../setup/vr-workstation.md#one-time-setup) / [§1.4](../IL_WORKFLOW_RUNBOOK.md#14-launch-steamvr-from-alvr)) |
+| SteamVR closes after a few seconds | Launched from Steam instead of ALVR | Launch SteamVR **from ALVR**; confirm launch option is set ([one-time setup](../setup/vr-workstation.md#one-time-setup) / [§1.4](../IL_WORKFLOW_RUNBOOK.md#14-launch-steamvr-from-alvr)) — [SteamVR from ALVR](#steamvr-must-launch-from-alvr) |
 | ALVR: `steamvr.vrsettings` does not exist | File not created yet | Create the file (see [ALVR server setup](../setup/vr-workstation.md#workstation-alvr-server)) |
 | Quest 3 not in ALVR Devices | Network or trust issue | Same **5 GHz Wi-Fi**; launch ALVR app on headset; try a dedicated router on institutional networks — [Network diagnostics](#network-diagnostics-alvr-pairing) |
 | Black screen in headset | Encode or hand-tracking mode | Reduce ALVR encode resolution; confirm Hand Tracking = SteamVR Input 2.0 |
@@ -93,7 +133,7 @@ Exact ALVR port numbers vary by release; if `ufw` is active, allow ALVR’s disc
 | SteamVR dashboard blocks the view | Dashboard still toggled on | SteamVR window → ☰ → **Toggle Dashboard** ([§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#16-toggle-steamvr-dashboard-off)) |
 | POV wrong after Start AR | First-spawn XR alignment | Remove headset a few seconds, put it back ([§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#19-pov-reset-if-the-first-spawn-looks-wrong)) |
 | Jittery hand tracking / shaky arms | Raw OpenXR hand-pose noise | Raise `--pose_smoothing` (default `0.5`; higher = smoother/laggier) — [Movement smoothing](04-vr-recording.md#movement-smoothing-pose_smoothing) |
-| Absolute mode feels unnatural / unusable | `--anchor_mode absolute` (hand pose = IK target; meant for humanoid avatars) | Use default `--anchor_mode hand_anchored` for Mobile AI room-scale — [VR teleoperation](03-vr-teleoperation.md) |
+| Absolute mode feels unnatural / unusable | `--anchor_mode absolute` (hand pose = IK target; meant for humanoid avatars) | Use default `--anchor_mode hand_anchored` for Mobile AI room-scale — [Hand-anchored vs absolute](#hand-anchored-vs-absolute-anchor-mode) |
 
 Connectivity issues above (setcap through POV) also affect recording sessions — same stack and startup order. Recording-only integrity issues:
 
@@ -101,11 +141,11 @@ Connectivity issues above (setcap through POV) also affect recording sessions �
 
 | Symptom | Fix (detail elsewhere) |
 |---------|------------------------|
-| `FileExistsError: Dataset root already exists` | Pass `--overwrite` (deletes the folder) or choose a new `--root` — [§3](../IL_WORKFLOW_RUNBOOK.md#single-session-one-shot). Does not append; multi-session → shards |
+| `FileExistsError: Dataset root already exists` | Pass `--overwrite` (deletes the folder) or choose a new `--root` — [§3](../IL_WORKFLOW_RUNBOOK.md#single-session-one-shot) · [Dataset root](#dataset-root-no-append-shards-and-overwrite). Does not append; multi-session → shards |
 | Unsure when to start the next episode after **N** | Wait for `[RECORD] Saved episode ...` (+ reset lines) — [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator) |
-| Cannot append to an existing finalized dataset folder | Shard-then-merge — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [VR recording](04-vr-recording.md#multi-session-collection-shard-then-merge) |
+| Cannot append to an existing finalized dataset folder | Shard-then-merge — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [Dataset root](#dataset-root-no-append-shards-and-overwrite) · [VR recording](04-vr-recording.md#multi-session-collection-shard-then-merge) |
 | Merged dataset has inconsistent state/action dims | All shards must share the same `--record_arm` and `--fps` — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) |
-| Unused arm drifts into bimanual / unlocked demos | Lock with `--record_arm left\|right` (reporting used `right`) — [Current limitations](#current-limitations) · [VR recording](04-vr-recording.md#one-arm-vs-two-arm-record_arm) |
+| Unused arm drifts into bimanual / unlocked demos | Lock with `--record_arm left\|right` (reporting used `right`) — [Unused-arm drift](#unused-arm-drift-and-record_arm-right) · [VR recording](04-vr-recording.md#one-arm-vs-two-arm-record_arm) |
 | Debug hand/EE markers clutter recording | Suppressed while recording; `--no_hand_markers` for pure teleop — [VR recording](04-vr-recording.md#debug-visualization) |
 | Scene cameras missing under XR / conflict with headset view | Recording keeps cameras (`--keep_cameras`); probes before a full run — [XR camera probes](04-vr-recording.md#xr-camera-compatibility-probes) |
 | Jitter baked into recorded demos | Same `--pose_smoothing` on `record_dual_arm_vr.py` — [Movement smoothing](04-vr-recording.md#movement-smoothing-pose_smoothing) |
