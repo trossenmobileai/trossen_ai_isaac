@@ -8,6 +8,8 @@ Demonstration collection over VR + LeRobot (design). Operator commands: [§3 Col
 
 Entrypoint: [`record_dual_arm_vr.py`](../../scripts/imitation_learning/recording/record_dual_arm_vr.py). Defaults to `Isaac-Reach-MobileAI-Record-Play-v0`, keeps record cameras enabled, and shares the VR control loop from [VR teleoperation](03-vr-teleoperation.md).
 
+**Existing `--root`:** `LeRobotRecorder` refuses to create over a path that already exists unless you pass `--overwrite` (deletes the folder) or pick a new root. That is not append — for multi-session collection use [shard-then-merge](#multi-session-collection-shard-then-merge). Operator detail: [§3](../IL_WORKFLOW_RUNBOOK.md#single-session-one-shot).
+
 ## Workstation keys (recording)
 
 **Isaac Sim must be the focused window** or keys are ignored. **Operator quick ref (keys + expected logs):** [runbook Controls — VR recording](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference). Operator ritual (C-shape, still before engage, slow motion, re-anchor, Ctrl+C finalize): [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator). Re-anchor (**B**) re-snapshots the hand↔EE relationship without pausing or resetting — see [VR teleoperation](03-vr-teleoperation.md).

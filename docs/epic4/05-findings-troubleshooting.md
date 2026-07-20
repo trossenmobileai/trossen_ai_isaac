@@ -92,6 +92,23 @@ Exact ALVR port numbers vary by release; if `ufw` is active, allow ALVR’s disc
 | Hands missing / only one cursor in SteamVR | Tracking or startup order | Hands visible before SteamVR; restart SteamVR via ALVR; full restart from [§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) |
 | SteamVR dashboard blocks the view | Dashboard still toggled on | SteamVR window → ☰ → **Toggle Dashboard** ([§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#16-toggle-steamvr-dashboard-off)) |
 | POV wrong after Start AR | First-spawn XR alignment | Remove headset a few seconds, put it back ([§1 VR session startup](../IL_WORKFLOW_RUNBOOK.md#19-pov-reset-if-the-first-spawn-looks-wrong)) |
+| Jittery hand tracking / shaky arms | Raw OpenXR hand-pose noise | Raise `--pose_smoothing` (default `0.5`; higher = smoother/laggier) — [Movement smoothing](04-vr-recording.md#movement-smoothing-pose_smoothing) |
+| Absolute mode feels unnatural / unusable | `--anchor_mode absolute` (hand pose = IK target; meant for humanoid avatars) | Use default `--anchor_mode hand_anchored` for Mobile AI room-scale — [VR teleoperation](03-vr-teleoperation.md) |
+
+Connectivity issues above (setcap through POV) also affect recording sessions — same stack and startup order. Recording-only integrity issues:
+
+### Recording-specific (index)
+
+| Symptom | Fix (detail elsewhere) |
+|---------|------------------------|
+| `FileExistsError: Dataset root already exists` | Pass `--overwrite` (deletes the folder) or choose a new `--root` — [§3](../IL_WORKFLOW_RUNBOOK.md#single-session-one-shot). Does not append; multi-session → shards |
+| Unsure when to start the next episode after **N** | Wait for `[RECORD] Saved episode ...` (+ reset lines) — [§1.10](../IL_WORKFLOW_RUNBOOK.md#110-engage-teleop-recording-with-the-workstation-operator) |
+| Cannot append to an existing finalized dataset folder | Shard-then-merge — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) · [VR recording](04-vr-recording.md#multi-session-collection-shard-then-merge) |
+| Merged dataset has inconsistent state/action dims | All shards must share the same `--record_arm` and `--fps` — [§3](../IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr) |
+| Unused arm drifts into bimanual / unlocked demos | Lock with `--record_arm left\|right` (reporting used `right`) — [Current limitations](#current-limitations) · [VR recording](04-vr-recording.md#one-arm-vs-two-arm-record_arm) |
+| Debug hand/EE markers clutter recording | Suppressed while recording; `--no_hand_markers` for pure teleop — [VR recording](04-vr-recording.md#debug-visualization) |
+| Scene cameras missing under XR / conflict with headset view | Recording keeps cameras (`--keep_cameras`); probes before a full run — [XR camera probes](04-vr-recording.md#xr-camera-compatibility-probes) |
+| Jitter baked into recorded demos | Same `--pose_smoothing` on `record_dual_arm_vr.py` — [Movement smoothing](04-vr-recording.md#movement-smoothing-pose_smoothing) |
 
 ## Continue reading
 

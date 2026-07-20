@@ -242,6 +242,8 @@ cd ~/trossen_ai_isaac
   --record_arm left   # or right
 ```
 
+> **`--overwrite` if `--root` already exists:** Creating a dataset fails with `FileExistsError: Dataset root already exists` unless you pass `--overwrite` (deletes the existing folder) or choose a new `--root`. Re-running the same path after a failed/partial session is a common hit. `--overwrite` does **not** append — for multi-day collection use [shards](#multi-session-shard-then-merge) instead.
+
 Then Start AR → engage → collect → **Ctrl+C** → wait for Finalized. Verify/train against that `--root` ([§5](#5-verify-dataset) / [§6](#6-train)).
 
 **Example (this project’s reporting collect — right arm, single-session shape):**
@@ -252,6 +254,7 @@ Then Start AR → engage → collect → **Ctrl+C** → wait for Finalized. Veri
   --root ~/lerobot_trossen/datasets/mobile_ai_right_pick_place_20260714_v2 \
   --fps 60 \
   --record_arm right
+  # add --overwrite only if re-creating this root from scratch
 ```
 
 ### Multi-session (shard, then merge)
@@ -265,6 +268,8 @@ cd ~/trossen_ai_isaac
 # repeat for more sessions as needed, then:
 ./scripts/imitation_learning/run_merge_dataset.sh --verify
 ```
+
+Each collect invocation writes a **new** shard path and passes `--overwrite` for that shard folder. Prefer this over wiping a single-session `--root` when you need to resume across days.
 
 After merge, verify/train against **`$ROOT_BASE/merged/`** (not an individual shard).
 
@@ -295,9 +300,10 @@ cd ~/trossen_ai_isaac
   --fps 60 \
   --enable_cameras \
   --record_arm right
+  # --overwrite if this --root already exists (deletes it; does not append)
 ```
 
-Use `--teleop_device gamepad` for gamepad.
+Use `--teleop_device gamepad` for gamepad. Same `FileExistsError` rule as [§3](#3-collect-demos-vr) if the root folder is already present.
 
 Automated smoke (no human demos):
 
