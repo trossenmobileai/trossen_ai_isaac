@@ -28,12 +28,52 @@ The IK-Rel arm drift issue documented in [Epic 3 Findings](../epic3/07-findings-
 
 ## Troubleshooting (VR / ALVR)
 
+### Debug order
+
+When a VR session fails, walk the stack **in order** before diving into Isaac or recording. Session startup (correct order every time): [§1](../IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time). IL / Python / dataset issues: [Epic 3 findings](../epic3/07-findings-troubleshooting.md).
+
+```mermaid
+flowchart TD
+  A[Symptom observed] --> B{ALVR connected?}
+  B -- No --> B1[Network, Trust, ALVR logs — see below]
+  B -- Yes --> C{SteamVR sees headset + hands?}
+  C -- No --> C1[Launch SteamVR from ALVR; OpenXR runtime]
+  C -- Yes --> D{Isaac Start AR / stereo view OK?}
+  D -- No --> D1[Startup order, OpenXR, GPU driver]
+  D -- Yes --> E{Teleop / recording script OK?}
+  E -- No --> E1[Focus Isaac; engage N/U; env activation]
+  E -- Yes --> F{Robot / dataset correct?}
+  F -- No --> F1[Anchor/reset ritual; verify_dataset — Epic 3 findings]
+  F -- Yes --> G[Resolved]
+```
+
+Use the symptom table below once you know which layer failed.
+
+### Network diagnostics (ALVR pairing)
+
+If the Quest never appears in ALVR Devices (or connects then drops), treat networking as first-class — not an app bug:
+
+1. Confirm Quest and PC share the **same** LAN/SSID ([§1.1](../IL_WORKFLOW_RUNBOOK.md#11-same-wi-fi), [one-time Wi-Fi](../setup/vr-workstation.md#network-wi-fi)). Prefer dedicated **5 GHz**; wired Ethernet for the workstation.
+2. On the PC, check that ALVR is listening and that the firewall is not blocking peer discovery/streaming:
+
+```bash
+ss -tulpn
+sudo ufw status
+```
+
+3. Watch the ALVR Devices list while opening the Quest ALVR app; **Trust** when prompted ([§1.2](../IL_WORKFLOW_RUNBOOK.md#12-open-alvr-on-the-headset-trust-on-the-pc)).
+4. Enforce order: **ALVR Server → Launch SteamVR from ALVR → Isaac** ([§1.4](../IL_WORKFLOW_RUNBOOK.md#14-launch-steamvr-from-alvr)).
+
+Exact ALVR port numbers vary by release; if `ufw` is active, allow ALVR’s discovery and streaming ports for the local network (or temporarily disable ufw to confirm it is the cause).
+
+### Symptom table
+
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `setcap` fails (file not found) | SteamVR install path differs | `find ~ -name "vrcompositor-launcher"` and use the returned path |
 | SteamVR closes after a few seconds | Launched from Steam instead of ALVR | Launch SteamVR **from ALVR**; confirm launch option is set ([one-time setup](../setup/vr-workstation.md#one-time-setup) / [§1.4](../IL_WORKFLOW_RUNBOOK.md#14-launch-steamvr-from-alvr)) |
 | ALVR: `steamvr.vrsettings` does not exist | File not created yet | Create the file (see [ALVR server setup](../setup/vr-workstation.md#workstation-alvr-server)) |
-| Quest 3 not in ALVR Devices | Network or trust issue | Same **5 GHz Wi-Fi**; launch ALVR app on headset; try a dedicated router on institutional networks |
+| Quest 3 not in ALVR Devices | Network or trust issue | Same **5 GHz Wi-Fi**; launch ALVR app on headset; try a dedicated router on institutional networks — [Network diagnostics](#network-diagnostics-alvr-pairing) |
 | Black screen in headset | Encode or hand-tracking mode | Reduce ALVR encode resolution; confirm Hand Tracking = SteamVR Input 2.0 |
 | Isaac Sim segfault on Start AR | NVIDIA driver conflict | Disable GPU firmware in `/etc/modprobe.d/nvidia.conf`: `options nvidia NVreg_EnableGpuFirmware=0`, then reboot |
 | `XR_ERROR_RUNTIME_UNAVAILABLE` | OpenXR runtime not running | Start ALVR + SteamVR; verify OpenXR runtime points to SteamVR |

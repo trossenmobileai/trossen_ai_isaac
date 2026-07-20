@@ -45,7 +45,7 @@ Both roles are required for a smooth session.
 
 ### 1.1 Same Wi-Fi
 
-Confirm Quest and workstation are on the **same** network ([one-time network notes](setup/vr-workstation.md#network-wi-fi)).
+Confirm Quest and workstation are on the **same** network ([one-time network notes](setup/vr-workstation.md#network-wi-fi)). If the headset never appears in ALVR: [Network diagnostics](epic4/05-findings-troubleshooting.md#network-diagnostics-alvr-pairing).
 
 ### 1.2 Open ALVR on the headset; trust on the PC
 
@@ -185,13 +185,25 @@ Do not press keys or move on until those lines appear. Then: hands still → **B
 | Teleop only | **N** engage · **M** pause · **B** re-anchor · **J** reset · **TAB** switch arm (single-arm) — [Controls](#controls-quick-reference) · design [VR teleoperation](epic4/03-vr-teleoperation.md) |
 | Recording | **U** engage · **I** pause · **N** episode · **M** discard · **B** re-anchor · **J** reset — [Controls](#controls-quick-reference) · design [VR recording](epic4/04-vr-recording.md) |
 
+### 1.11 Session smoke checklist
+
+After [§1.1](#11-same-wi-fi)–[§1.10](#110-engage-teleop-recording-with-the-workstation-operator), confirm the stack before a long collection run. Layered debug if something fails: [Epic 4 findings — Debug order](epic4/05-findings-troubleshooting.md#debug-order).
+
+- [ ] **Connection** — Quest appears in ALVR Devices and SteamVR (launched from ALVR)
+- [ ] **Tracking** — both hands visible; head motion updates the SteamVR / XR view
+- [ ] **Visual** — after **Start AR**, headset shows stereo Isaac Sim (not a black/static view)
+- [ ] **Control** — after warm-up + engage (**N** teleop / **U** recording), hands drive the arms; pinch toggles gripper; **TAB** switches arm in single-arm teleop
+- [ ] **Motion** — robot responds via the same IK-Abs path as keyboard teleop (no jump after a still engage)
+- [ ] **Recording** (when collecting) — **U** / **N** / **M** behave as expected; wait for `[RECORD] Saved episode ...` before the next take — [§3](#3-collect-demos-vr)
+- [ ] **Dataset** (after a short test episode) — `verify_dataset.py` passes — [§5](#5-verify-dataset)
+
 You are now ready to practice ([§2](#2-practice-vr-teleop-no-dataset)) or collect ([§3](#3-collect-demos-vr)).
 
 ---
 
 ## 2. Practice VR teleop (no dataset)
 
-Complete [§1 VR session startup](#1-vr-session-startup-every-time) first (through Start AR). Design: [VR teleoperation](epic4/03-vr-teleoperation.md). One-time host: [VR workstation setup](setup/vr-workstation.md).
+Complete [§1 VR session startup](#1-vr-session-startup-every-time) first (through Start AR). Optional: [§1.11 smoke checklist](#111-session-smoke-checklist). Design: [VR teleoperation](epic4/03-vr-teleoperation.md). One-time host: [VR workstation setup](setup/vr-workstation.md).
 
 ```bash
 cd ~/trossen_ai_isaac
@@ -520,7 +532,7 @@ Editable defaults / args near the top of `run_play_replay.sh` (dataset root, epi
 | Stage | Copy-paste commands |
 |-------|---------------------|
 | One-time setup | [setup hub](setup/README.md) · [VR workstation](setup/vr-workstation.md) |
-| VR session (every time) | [§1](#1-vr-session-startup-every-time) |
+| VR session (every time) | [§1](#1-vr-session-startup-every-time) · [smoke checklist](#111-session-smoke-checklist) |
 | VR practice teleop | [§2](#2-practice-vr-teleop-no-dataset) · design [VR teleoperation](epic4/03-vr-teleoperation.md) |
 | VR collect | [§3](#3-collect-demos-vr) · design [VR recording](epic4/04-vr-recording.md) |
 | KB practice / smoke record | [§4](#4-collect-demos-keyboard-gamepad-alternate) |

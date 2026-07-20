@@ -138,7 +138,7 @@ flowchart TD
 | [Background and stack](epic4/02-background-and-stack.md) | Epic 3 integration + VR stack (why each hop) |
 | [VR teleoperation](epic4/03-vr-teleoperation.md) | Module, wiring, keys, CLI (design) |
 | [VR recording](epic4/04-vr-recording.md) | Dataset modes, shards, smoothing (design) |
-| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Limitations and VR/ALVR fixes |
+| [Findings and troubleshooting](epic4/05-findings-troubleshooting.md) | Limitations, debug order, VR/ALVR fixes |
 | [Future work](epic4/06-future-work.md) | Follow-ups |
 
 ---

@@ -19,7 +19,7 @@ Do this once per machine (or after re-imaging).
 Quest 3 and the workstation must be on the **same** local network so ALVR can discover the headset.
 
 - Prefer **5 GHz** Wi-Fi; a dedicated access point near the play area is more reliable than busy institutional Wi-Fi.
-- Institutional networks often block peer-to-peer traffic — see [Findings](../epic4/05-findings-troubleshooting.md).
+- Institutional networks often block peer-to-peer traffic — see [Network diagnostics](../epic4/05-findings-troubleshooting.md#network-diagnostics-alvr-pairing).
 
 ### Meta Quest 3
 
