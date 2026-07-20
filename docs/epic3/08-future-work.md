@@ -7,6 +7,7 @@ Derived from open items in [Findings and Troubleshooting](07-findings-troublesho
 - [ ] **Sim-to-real on physical Mobile AI** — policies are sim-only today ([Current limitations](07-findings-troubleshooting.md#current-limitations))
 - [ ] **Close the visual / domain gap** — lighting, materials/textures, and camera appearance closer to RealSense / lab conditions before hardware transfer
 - [ ] **Mobile AI RL / PPO tasks** — unlike stock WXAI reach, lift, and cabinet; no Mobile AI RL envs yet
+- [ ] **Multiple object types in the Reach scene** — extend the discrete `EventCfg` pattern beyond cube color (e.g. swap `CuboidCfg` for a small asset set / object-type choice per env), reusing the same `env_ids`-aware reset style as `randomize_cube_color_discrete` ([Simulation Scene](02-tasks-and-scene.md#reset-randomization-eventcfg))
 
 ## Teleoperation and demos
 

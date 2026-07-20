@@ -189,6 +189,8 @@ Commanded joint position targets captured at each step become the dataset `actio
 
 The pick-and-place digital twin is assembled in [`reach_env_cfg.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/tasks/manager_based/manipulation/mobile_ai/reach/reach_env_cfg.py) as `MobileAIReachSceneCfg` plus reset `EventCfg`. Teleop, VR, recording, and closed-loop eval all reuse this scene (recording adds cameras; eval uses a joint-position lift variant of the same table and cube).
 
+**Why randomize:** imitation-learning policies trained on the recorded LeRobot set ([Recording](04-recording-lerobot.md)) need the cube in varied positions and colors; a fixed pick point / color overfits and fails closed-loop eval ([Evaluation](06-evaluation.md)). Position/color resampling on every `env.reset()` (including workstation **J**) is downstream of that requirement.
+
 > **Screenshot placeholder:** `docs/assets/epic3/mobile-ai-pick-place-scene.png` — Isaac Sim view of Mobile AI, table, and cube (pick-and-place digital twin).
 >
 > ![Mobile AI pick-and-place scene (placeholder)](../assets/epic3/mobile-ai-pick-place-scene.png)
@@ -217,29 +219,50 @@ flowchart TB
     Robot -.-> CamH & CamL & CamR
 ```
 
+#### Why the scene is procedural (not a USD file)
+
+The workstation (table + cube) is declared in Python via `sim_utils.CuboidCfg` inside `MobileAIReachSceneCfg`, not baked into a `.usd`. Three USD-first approaches were tried and rejected:
+
+| Phase | Approach | Why rejected | Lesson |
+|-------|----------|--------------|--------|
+| 1 | Edit `mobile_ai.usd` in the Isaac Sim GUI to attach table/cube | Shared foundational asset (joint drives, mimic grippers); GUI edits risk the kinematic chain and bake a non-randomizable workspace into every parallel env clone | Treat `assets/robots/mobile_ai/mobile_ai.usd` as read-only; configs (`MOBILE_AI_CFG`, `MOBILE_AI_HIGH_PD_CFG`) already reference it |
+| 2 | Separate `Virtual_Env.usd` referenced as a second layer | Reference stage still contained an embedded robot → two overlapping robots (`/World/Robot` + baked-in mesh); deleting the duplicate broke prim path resolution | A USD reference brings the whole stage, not only the geometry you intended |
+| 3 | Manual Omniverse Layer / payload cleanup | Workspace nested as an external payload under an anonymous root; GUI “save” dropped sub-links and emptied the stage | Anonymous/payload layers are fragile under GUI edits |
+
+**Resolution:** spawn table and cube in memory from scene config with explicit meter offsets relative to the robot origin. No shared file to corrupt, no duplicate robot reference, no GUI save path. Same class documented below.
+
 #### Scene assets (`MobileAIReachSceneCfg`)
 
 | Asset | How it is configured |
 |-------|----------------------|
 | **Ground** | Default Isaac Lab ground plane at `/World/ground`. |
 | **Light** | Dome light (`color≈0.75`, intensity `2500`) for even illumination of RGB cameras. |
-| **Table** | Grey cuboid `size=(0.99, 2.0, 0.807)` m with collision and rigid body props. Spawned at `(0.85, 0.0, 0.4035)` so the top sits in front of the Mobile AI base. Visual material is a dark grey preview surface. |
-| **Cube** | Rigid cuboid `0.03×0.03×0.03` m, mass `0.1` kg, collision enabled. Initial pose sits on the table surface (`z≈0.822`). Default visual color is red; reset events override color (below). |
+| **Table** | Grey cuboid `size=(0.99, 2.0, 0.807)` m with collision and rigid body props. Spawned at `(0.85, 0.0, 0.4035)` so the top sits in front of the Mobile AI base. Visual material is a dark grey preview surface. Declared as `AssetBaseCfg` (static prop — no per-reset root-state writes). |
+| **Cube** | **`RigidObjectCfg`** cuboid `0.03×0.03×0.03` m, mass `0.1` kg, collision enabled. Initial pose on the table surface (`z≈0.822`). Default visual color is red; reset events override color (below). Must be `RigidObjectCfg` (not `AssetBaseCfg`): position randomization uses `write_root_pose_to_sim()` / `reset_root_state_uniform`, which require a physics-trackable root state. Prim path uses `{ENV_REGEX_NS}` so each parallel env gets its own `/World/envs/env_*/Cube`. |
 | **Robot** | `MOBILE_AI_HIGH_PD_CFG` with `fix_root_link=True` so the base stays anchored, `disable_gravity=True` on the articulation spawn (arms are position-controlled), self-collisions enabled, and higher PhysX solver iterations for stable contact. |
 
+`MobileAIReachEnvCfg` builds the scene with `replicate_physics=False`. Default `True` shares one physics representation across clones for speed; that breaks per-instance cube pose/color randomization (every env can silently get the same roll). Both reset events below depend on this flag — see [Findings](07-findings-troubleshooting.md#scene-and-randomization).
+
 #### Reset randomization (`EventCfg`)
+
+Isaac Lab fires `EventTerm` fields whose `mode` matches the trigger. These cube events use `mode="reset"` (every `env.reset()`), matching `reset_robot_joints` — not `startup` (once at launch) or `interval`. `SceneEntityCfg("cube")` names the scene field; Isaac Lab resolves it to the spawned prim at runtime. `ik_abs_env_cfg.py` and `record_env_cfg.py` inherit this `EventCfg` unchanged.
+
+**IL motivation:** varied cube XY + discrete RGB on every reset so demos (and later eval) are not locked to one pose/color.
 
 On every environment reset (including after **J** / episode save):
 
 1. **Robot joints** restore to the default scaled pose (no random joint noise).
-2. **Cube XY** is resampled on the table with `reset_root_state_uniform` ranges roughly `x∈[-0.10, 0.05]`, `y∈[-0.20, 0.0]` relative to the default cube pose (`z` fixed).
-3. **Cube color** is chosen discretely from pure red, green, or blue via `randomize_cube_color_discrete` (stored on the env for eval metrics).
+2. **Cube XY** is resampled with `mdp.reset_root_state_uniform`. `pose_range` values are **deltas from the cube’s `init_state.pos`** `(0.85, 0.0, 0.822)`, not absolute world or table-origin coordinates — roughly `x∈[-0.10, 0.05]`, `y∈[-0.20, 0.0]`, `z` fixed at `0`. Absolute numbers plugged in as deltas spawn the cube off the table.
+3. **Cube color** is chosen discretely from pure red, green, or blue via custom `randomize_cube_color_discrete` (stored on the env for eval metrics). Built-in `mdp.randomize_visual_color` only accepts a continuous two-tuple `[low_rgb, high_rgb]`; passing three palette colors crashes at launch — see [Findings](07-findings-troubleshooting.md#scene-and-randomization).
+
+**Sanity-check:** events only fire on `env.reset()`. A short teleop run with only the 12 s episode timeout shows few distinct poses/colors — that is expected. Press workstation **J** repeatedly to force resets and confirm the reachable zone and all three colors ([Controls](../IL_WORKFLOW_RUNBOOK.md#controls-quick-reference)).
 
 #### Simulation timing and physics
 
-- Base reach config: `sim.dt = 1/60`, `decimation = 2` (control at 30 Hz).
+- Base reach config: `sim.dt = 1/60`, `decimation = 2` (control at 30 Hz); `episode_length_s = 12.0` in `MobileAIReachEnvCfg.__post_init__`.
 - Record-Play: `decimation = 1` so demos are stored at **60 Hz**, matching closed-loop eval FPS.
 - Anchored base + high PD gains keep teleop IK targets tracking without tipping the mobile base.
+- `replicate_physics=False` on the scene (above) so per-env cube randomization is independent.
 
 #### Recording cameras
 
@@ -260,5 +283,6 @@ Code-level overview of the same classes: [`reach_env_cfg.py`](#reach_env_cfgpy-s
 
 - [One-time setup](../setup/README.md)
 - [§0 Prerequisites](../IL_WORKFLOW_RUNBOOK.md#0-prerequisites)
+- [Findings — scene and randomization](07-findings-troubleshooting.md#scene-and-randomization)
 - [Teleoperation](03-teleoperation.md)
 - [Epic 3 hub](../EPIC3_SIMULATION_TRAINING_PIPELINE.md)
