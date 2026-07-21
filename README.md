@@ -51,7 +51,7 @@ If you just cloned the fork, use this path:
 | [`docs/epic3/`](docs/epic3/) | Epic 3 design pages (tasks, teleop, recording, training, evaluation) |
 | [`docs/epic4/`](docs/epic4/) | Epic 4 design pages (VR stack, teleop, recording) |
 | [`docs/ACT_EVAL_REPORT_100K.md`](docs/ACT_EVAL_REPORT_100K.md) | ACT 100k closed-loop results (56.7%) |
-| [`docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md`](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [`docs/EPIC4_VR_INTEGRATION.md`](docs/EPIC4_VR_INTEGRATION.md) | **BookStack book intros** (short; full story in `docs/README.md`) |
+| [`docs/EPIC3_*.md`](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md) / [`docs/EPIC4_*.md`](docs/EPIC4_VR_INTEGRATION.md) | Thin GitHub hubs for BookStack→repo links (full long-form is on BookStack; design chapters in `docs/epic3/` / `docs/epic4/`) |
 
 Official upstream tutorial: [Trossen AI Isaac](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/trossen_ai_isaac.html).
 
@@ -477,4 +477,4 @@ robot.reset_to_default_pose()
 - [ACT Evaluation Report](docs/ACT_EVAL_REPORT_100K.md)
 - [Epic 3 pages](docs/epic3/)
 - [Epic 4 pages](docs/epic4/)
-- BookStack intros: [Epic 3 hub](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md), [Epic 4 hub](docs/EPIC4_VR_INTEGRATION.md)
+- BookStack link hubs: [Epic 3](docs/EPIC3_SIMULATION_TRAINING_PIPELINE.md), [Epic 4](docs/EPIC4_VR_INTEGRATION.md)

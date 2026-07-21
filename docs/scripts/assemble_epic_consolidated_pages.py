@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Assemble docs/EPIC3_*.md and docs/EPIC4_*.md as single-file consolidated copies of epicN chapters.
+"""Optional regenerator for docs/EPIC3_*.md and docs/EPIC4_*.md staging copies.
 
-Canonical design remains under docs/epic3/ and docs/epic4/. These EPIC* files are staging
-copies for external wiki upload.
+Canonical in-repo design remains under docs/epic3/ and docs/epic4/. Long-form design is
+published on BookStack. The EPIC* paths in git are thin link hubs (so BookStack→GitHub
+URLs keep resolving) — do not treat a full regenerated body as the source of truth.
 """
 
 from __future__ import annotations

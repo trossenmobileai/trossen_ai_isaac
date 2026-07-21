@@ -15,7 +15,7 @@ Mobile AI requires **dual-arm** control with **switchable** arm selection (one a
 | [`teleop_se3_agent.py`](../../scripts/teleoperation/teleop_se3_agent.py) | [`teleop_dual_arm_switch.py`](../../scripts/teleoperation/teleop_dual_arm_switch.py) |
 | Single-arm Se3 teleoperation | Switchable dual-arm IK-Abs teleoperation via [`se3_switch.py`](../../source/trossen_ai_isaac/trossen_ai_isaac/teleop/se3_switch.py) |
 
-VR hand-tracking teleoperation extends this layer further; see [Epic 4](../EPIC4_VR_INTEGRATION.md) / [VR teleoperation](../epic4/03-vr-teleoperation.md).
+VR hand-tracking teleoperation extends this layer further; see [Epic 4](../epic4/README.md) / [VR teleoperation](../epic4/03-vr-teleoperation.md).
 
 #### Control model and loop
 
