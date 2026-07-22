@@ -195,3 +195,4 @@ Upstream baseline: [Trossen AI Isaac tutorial](https://docs.trossenrobotics.com/
 - [§1 VR session](IL_WORKFLOW_RUNBOOK.md#1-vr-session-startup-every-time) → [§2 Practice](IL_WORKFLOW_RUNBOOK.md#2-practice-vr-teleop-no-dataset) → [§3 Collect](IL_WORKFLOW_RUNBOOK.md#3-collect-demos-vr)
 - [§6 Train](IL_WORKFLOW_RUNBOOK.md#6-train) / [§7 Evaluate](IL_WORKFLOW_RUNBOOK.md#7-evaluate-closed-loop)
 - [ACT Evaluation Report](ACT_EVAL_REPORT_100K.md)
+- [Bookstack documentation](https://bookstack.h-da.de/books/machine-learning-in-industrial-production-mlip/chapter/adaptive-automation-in-human-centric-spaces-enabling-high-variance-manipulation-via-zero-code-reconfiguration)
