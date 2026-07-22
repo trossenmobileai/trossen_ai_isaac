@@ -25,7 +25,7 @@ Quest 3 and the workstation must be on the **same** local network so ALVR can di
 
 Official first-run guide: [Getting started with Meta Quest 3](https://www.meta.com/en-gb/help/quest/1994971530885728/) (Meta Help Center).
 
-1. Power on the headset and complete Meta first-run / accounts as needed.
+1. Power on the headset and complete Meta first-run. Sign in with the shared **Meta Horizon** account (`trossenmobileai@gmail.com`); ask the supervisor for the password — see [Shared team accounts](README.md#shared-team-accounts).
 2. Enable **Hand Tracking** and **Auto Switch between Hands and Controllers** (Quest Settings → Movement / Hands — exact labels vary by OS version).
 3. Install the **ALVR** client on the headset (Meta Store listing or the sideload path your team uses for the matching ALVR server version).
 
@@ -33,7 +33,7 @@ Official first-run guide: [Getting started with Meta Quest 3](https://www.meta.c
 
 ### Workstation: Steam and SteamVR
 
-1. Install **Steam** for Linux from [store.steampowered.com](https://store.steampowered.com/) (or your distro’s supported method).
+1. Install **Steam** for Linux from [store.steampowered.com](https://store.steampowered.com/) (or your distro’s supported method). Sign in with the shared Steam account (email `trossenmobileai@gmail.com`, account name `trossenmobileai`); ask the supervisor for the password — see [Shared team accounts](README.md#shared-team-accounts).
 2. In Steam → Library, install **SteamVR**.
 3. Apply the **Linux capability** fix so SteamVR can set scheduling priority:
 

@@ -17,6 +17,8 @@ Follow the upstream Trossen guide for Isaac Sim + Isaac Lab install, then use **
 
 ## Clone this fork
 
+The fork lives under the shared **GitHub** account (`trossenmobileai@gmail.com`). Use that login if HTTPS/auth is required; ask the supervisor for the password — see [Shared team accounts](README.md#shared-team-accounts).
+
 ```bash
 git clone https://github.com/trossenmobileai/trossen_ai_isaac.git
 cd ~/trossen_ai_isaac   # if you cloned elsewhere, cd into that clone instead
